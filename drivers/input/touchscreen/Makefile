@@ -68,4 +68,15 @@ obj-$(CONFIG_TOUCHSCREEN_W90X900)	+= w90p910_ts.o
 obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_MSM_LEGACY)		+= msm_touch.o
 obj-$(CONFIG_TOUCHSCREEN_CY8C_TS)	+= cy8c_ts.o
-obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)       += cyttsp-i2c.o
+
+ifeq ($(CONFIG_TOUCHSCREEN_CYTTSP_I2C),y)
+  obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)       += cyttsp-i2c.o
+  obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)	+= issp_driver_routines.o
+  obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)	+= issp_main.o
+  obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)	+= issp_routines.o
+endif
+
+
+ifeq ($(CONFIG_TOUCHSCREEN_SAIN_TOUCH),y)
+  obj-$(CONFIG_TOUCHSCREEN_SAIN_TOUCH)       += sain_touch.o
+endif

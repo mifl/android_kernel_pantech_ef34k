@@ -16,6 +16,10 @@
 #include <linux/power_supply.h>
 
 enum {
+#ifdef CONFIG_SKY_CHARGING
+        CHG_TYPE_NONE,
+        CHG_TYPE_FACTORY,
+#endif
 	CHG_TYPE_USB,
 	CHG_TYPE_AC
 };
@@ -75,6 +79,9 @@ struct msm_battery_gauge {
 	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
 	int (*monitor_for_recharging) (void);
+#ifdef CONFIG_SKY_CHARGING
+	int (*is_factory_cable) (void);
+#endif
 };
 /**
  * struct msm_charger_platform_data

@@ -216,11 +216,11 @@ unsigned long msm_subsystem_get_partition_no(int subsys_id)
 	case MSM_SUBSYSTEM_VIDEO_FWARE:
 		return VIDEO_FIRMWARE_POOL;
 	case MSM_SUBSYSTEM_VIDEO:
-		return VIDEO_MAIN_POOL;
+		return LOW_256MB_POOL;
 	case MSM_SUBSYSTEM_CAMERA:
 	case MSM_SUBSYSTEM_DISPLAY:
 	case MSM_SUBSYSTEM_ROTATOR:
-		return GEN_POOL;
+		return HIGH_POOL;
 	default:
 		return 0xFFFFFFFF;
 	}

@@ -40,6 +40,18 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define WAKE_LOCK_AUTO_EXPIRE            (1U << 10)
 #define WAKE_LOCK_PREVENTING_SUSPEND     (1U << 11)
 
+
+//Forever to debug..
+#define WAKELOCK_STAT_CRASH_DEBUG
+
+#ifdef WAKELOCK_STAT_CRASH_DEBUG
+int wakelock_stats_last_success_cnt=0;
+int wakelock_stats_debug_cnt=0;
+int wakelock_stats_crashed_cnt=0;
+int wakelock_stats_removed_crashed_wakelock=0;
+#endif
+
+
 static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
 static struct list_head active_wake_locks[WAKE_LOCK_TYPE_COUNT];
@@ -58,6 +70,7 @@ static struct wake_lock suspend_backoff_lock;
 #define SUSPEND_BACKOFF_INTERVAL	10000
 
 static unsigned suspend_short_count;
+
 
 #ifdef CONFIG_WAKELOCK_STAT
 static struct wake_lock deleted_wake_locks;
@@ -86,6 +99,13 @@ int get_expired_time(struct wake_lock *lock, ktime_t *expire_time)
 	return 1;
 }
 
+#if 0//block because of error
+unsigned char pre_wakelock_print=0;
+unsigned char for_wakelock_print=0;
+const char *wakelock_name[4];
+unsigned char name_index=0;
+int64_t wakelock_time_array[4];
+#endif
 
 static int print_lock_stat(struct seq_file *m, struct wake_lock *lock)
 {
@@ -96,6 +116,23 @@ static int print_lock_stat(struct seq_file *m, struct wake_lock *lock)
 	ktime_t max_time = lock->stat.max_time;
 
 	ktime_t prevent_suspend_time = lock->stat.prevent_suspend_time;
+
+#if 0//block because of error
+	ktime_t wakelock_time;
+
+	memcpy(&wakelock_name[name_index],lock->name,sizeof(lock->name));
+	wakelock_time = ktime_get();
+	wakelock_time_array[name_index] = ktime_to_us(wakelock_time);
+
+
+	name_index ++;
+
+	if(name_index == 3)
+	{
+		name_index = 0;
+	}
+#endif
+
 	if (lock->flags & WAKE_LOCK_ACTIVE) {
 		ktime_t now, add_time;
 		int expired = get_expired_time(lock, &now);
@@ -135,12 +172,73 @@ static int wakelock_stats_show(struct seq_file *m, void *unused)
 
 	ret = seq_puts(m, "name\tcount\texpire_count\twake_count\tactive_since"
 			"\ttotal_time\tsleep_time\tmax_time\tlast_change\n");
+#ifdef WAKELOCK_STAT_CRASH_DEBUG	
+	wakelock_stats_debug_cnt=0;
+	wakelock_stats_crashed_cnt=0;
+	list_for_each_entry(lock, &inactive_locks, link)
+	{
+	#if 0//block because of error
+		pre_wakelock_print++ ;
+	#endif
+//		printk("%s wakelock_stats_debug_cnt=%d flags=0x%x name=[%s] lock=%x\n",
+//			__func__,wakelock_stats_debug_cnt,lock->flags,lock->name,(unsigned int)lock);
+		if(((unsigned int)lock >0x00001000)&(((unsigned int)lock)%4 ==0)){
+			ret = print_lock_stat(m, lock);
+		}
+		else{
+			printk("%s wakelock_stats_debug_cnt=%d wakelock_stats_last_success_cnt=%d \n"
+				,__func__,wakelock_stats_debug_cnt,wakelock_stats_last_success_cnt);
+			
+			wakelock_stats_crashed_cnt = wakelock_stats_debug_cnt;
+			break;
+		}
+		wakelock_stats_debug_cnt++;
+	}
+
+	if(wakelock_stats_crashed_cnt){
+	
+		int cnt=0;
+
+		printk("===================================================================================\n");
+		printk("%s We Should remove crashed links\n",__func__);
+		printk("===================================================================================\n");
+	
+		list_for_each_entry(lock, &inactive_locks, link){
+			printk("%s cnt=%d flags=0x%x name=[%s] lock=%x\n"
+				,__func__,cnt,lock->flags,lock->name,(unsigned int)lock);
+			
+			if( ++cnt == wakelock_stats_crashed_cnt){
+				printk("%s We Should remove crashed locks\n",__func__);
+				printk("%s wakelock_stats_debug_cnt=%d flags=0x%x name=[%s] lock=%x\n",
+					__func__,wakelock_stats_debug_cnt,lock->flags,lock->name,(unsigned int)lock);
+				list_del(&lock->link);
+				wakelock_stats_removed_crashed_wakelock++;
+				break;
+			}
+		}
+	}
+	else{
+		wakelock_stats_last_success_cnt= wakelock_stats_debug_cnt;
+	}
+
+#else
 	list_for_each_entry(lock, &inactive_locks, link)
 		ret = print_lock_stat(m, lock);
+#endif
+
 	for (type = 0; type < WAKE_LOCK_TYPE_COUNT; type++) {
 		list_for_each_entry(lock, &active_wake_locks[type], link)
+		{
+#if 0//block because of error
+			for_wakelock_print++;
+#endif
 			ret = print_lock_stat(m, lock);
+		}
 	}
+#if 0//block because of error
+	pre_wakelock_print=0 ;
+	for_wakelock_print=0;
+#endif	
 	spin_unlock_irqrestore(&list_lock, irqflags);
 	return 0;
 }

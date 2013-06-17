@@ -36,6 +36,11 @@
 #include <mach/dma.h>
 #include <mach/msm_tsif.h>
 
+#if 1//#ifdef TSIF_PATCH2_AFTER_1080
+#include <mach/msm_iomap.h>
+#include <mach/scm-io.h>
+#endif
+
 /*
  * TSIF register offsets
  */
@@ -183,6 +188,33 @@ struct msm_tsif_device {
 	void (*client_notify)(void *client_data);
 };
 
+
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+extern irqreturn_t tdmb_interrupt(int irq, void *dev_id);
+
+#define TSIF_USE_TSIF_PORT2
+#ifdef TSIF_USE_TSIF_PORT2
+#define TSIF_PATCH2_AFTER_1080
+#endif
+//#define FEATURE_TSIF_DEBUG_MSG
+//#define FEATURE_TSIF_CHECK_ON_BOOT
+
+#ifdef FEATURE_TSIF_CHECK_ON_BOOT
+unsigned char tsif_buf[TSIF_PKT_SIZE*TSIF_PKTS_IN_CHUNK_DEFAULT];
+static void tsif_data_check_on_boot(void * data_buffer, int size)
+{
+  int i;
+  memset((void*)&tsif_buf, 0xff, sizeof(tsif_buf));
+  for(i=0; i < (size/TSIF_PKT_SIZE); i++)
+  {
+    memcpy((void*)&tsif_buf[i*188], (data_buffer+i*TSIF_PKT_SIZE), 188);
+    pr_info("TSIF data check [%x] [%x] [%x] [%x]",tsif_buf[i*188],tsif_buf[i*188+1],tsif_buf[i*188+2],tsif_buf[i*188+3]);
+  }
+}
+#endif
+
+#endif /* CONFIG_SKY_TDMB_TSIF_IF */
+
 /* ===clocks begin=== */
 
 static void tsif_put_clocks(struct msm_tsif_device *tsif_device)
@@ -249,6 +281,11 @@ ret:
 
 static void tsif_clock(struct msm_tsif_device *tsif_device, int on)
 {
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] on_off[%d]\n", __func__, on);
+#endif
+
 	if (on) {
 		if (tsif_device->tsif_clk)
 			clk_enable(tsif_device->tsif_clk);
@@ -386,6 +423,11 @@ static int tsif_start_hw(struct msm_tsif_device *tsif_device)
 		  TSIF_STS_CTL_EN_TCR |
 		  TSIF_STS_CTL_EN_DM;
 	dev_info(&tsif_device->pdev->dev, "%s\n", __func__);
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] mode[%d]\n", __func__, tsif_device->mode);
+#endif
+
 	switch (tsif_device->mode) {
 	case 1: /* mode 1 */
 		ctl |= (0 << 5);
@@ -402,6 +444,28 @@ static int tsif_start_hw(struct msm_tsif_device *tsif_device)
 	iowrite32(ctl, tsif_device->base + TSIF_STS_CTL_OFF);
 	iowrite32(tsif_device->time_limit,
 		  tsif_device->base + TSIF_TIME_LIMIT_OFF);
+//Patch MSM8x60 TSIF Port2 110111
+#ifdef TSIF_USE_TSIF_PORT2 
+    {  
+      u32 tsif2_ctl;
+#ifdef TSIF_PATCH2_AFTER_1080
+      wmb();
+      tsif2_ctl = secure_readl(MSM_TCSR_BASE + 0x70); 
+      tsif2_ctl = tsif2_ctl | 1 << 31; 
+      wmb(); 
+      secure_writel(tsif2_ctl, MSM_TCSR_BASE + 0x70);
+#else
+      void __iomem *mux;
+      mux= ioremap(0x16B00070, 0x4);
+      wmb();
+      tsif2_ctl = ioread32(mux);
+      tsif2_ctl = tsif2_ctl | 1 << 31;
+      wmb();
+      iowrite32(tsif2_ctl, mux);
+#endif
+    }
+#endif
+
 	wmb();
 	iowrite32(ctl | TSIF_STS_CTL_START,
 		  tsif_device->base + TSIF_STS_CTL_OFF);
@@ -530,6 +594,11 @@ static void tsif_dmov_complete_func(struct msm_dmov_cmd *cmd,
 	struct tsif_xfer *xfer;
 	struct msm_tsif_device *tsif_device;
 	int reschedule = 0;
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s], result[0x%08x]\n", __func__, result);
+#endif
+
 	if (!(result & DMOV_RSLT_VALID)) { /* can I trust to @cmd? */
 		pr_err("Invalid DMOV result: rc=0x%08x, cmd = %p", result, cmd);
 		return;
@@ -558,6 +627,19 @@ static void tsif_dmov_complete_func(struct msm_dmov_cmd *cmd,
 		if (w == xfer->wi)
 			tsif_device->stat_soft_drop++;
 		reschedule = (tsif_device->state == tsif_state_running);
+
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+		tdmb_interrupt((int)tsif_device->irq, (void*)tsif_device->pdev->id);
+#endif
+
+#ifdef FEATURE_TSIF_CHECK_ON_BOOT
+{
+    void *data_addr;
+    data_addr= tsif_device->data_buffer + data_offset;
+    tsif_data_check_on_boot(data_addr, TSIF_PKT_SIZE*TSIF_PKTS_IN_CHUNK);
+}
+#endif
+
 #ifdef CONFIG_TSIF_DEBUG
 		/* IFI calculation */
 		/*
@@ -1048,6 +1130,11 @@ static int action_open(struct msm_tsif_device *tsif_device)
 		dev_err(&tsif_device->pdev->dev, "Unable to start HW\n");
 		tsif_dma_exit(tsif_device);
 		tsif_clock(tsif_device, 0);
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+		pr_info("[%s] rc[%d]\n", __func__,rc);
+#endif
+
 		return rc;
 	}
 
@@ -1060,6 +1147,11 @@ static int action_open(struct msm_tsif_device *tsif_device)
 	}
 
 	wake_lock(&tsif_device->wake_lock);
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] end\n", __func__);
+#endif
+  
 	return rc;
 }
 

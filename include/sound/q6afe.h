@@ -100,4 +100,11 @@ int afe_convert_virtual_to_portid(u16 port_id);
 
 int afe_pseudo_port_start_nowait(u16 port_id);
 int afe_pseudo_port_stop_nowait(u16 port_id);
+
+#ifdef CONFIG_RECINCALL
+int afe_validate_port(u16 port_id);
+int afe_get_port_index(u16 port_id);
+int afe_start_pseudo_port(u16 port_id);
+int afe_stop_pseudo_port(u16 port_id);
+#endif
 #endif /* __Q6AFE_H__ */

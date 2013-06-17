@@ -545,6 +545,9 @@ static int diag_function_set_alt(struct usb_function *f,
 	dev->configured = 1;
 	spin_unlock_irqrestore(&dev->lock, flags);
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	usb_interface_enum_cb(DIAG_TYPE_FLAG);
+#endif
 	return rc;
 }
 
@@ -567,6 +570,20 @@ static int diag_function_bind(struct usb_configuration *c,
 	struct diag_context *ctxt = func_to_diag(f);
 	struct usb_ep *ep;
 	int status = -ENODEV;
+
+#if defined(CONFIG_ANDROID_PANTECH_USB)
+	if(!b_qualcomm_usb_mode && b_pantech_usb_module){
+		intf_desc.bInterfaceSubClass = 0xE0;
+#ifdef CONFIG_PANTECH_ATNT
+		intf_desc.bInterfaceProtocol = 0x20;
+#else
+		intf_desc.bInterfaceProtocol = 0x10;
+#endif		
+	}else{
+		intf_desc.bInterfaceSubClass = 0xFF;
+	  intf_desc.bInterfaceProtocol = 0xFF;
+	}
+#endif
 
 	intf_desc.bInterfaceNumber =  usb_interface_id(c, f);
 

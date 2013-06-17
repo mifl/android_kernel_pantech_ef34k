@@ -48,6 +48,63 @@ static unsigned long delay_time;
 static unsigned long bark_time;
 static unsigned long long last_pet;
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define TZBSP_CPU_COUNT           2
+typedef  unsigned int uint32;
+
+typedef struct tzbsp_dump_cpu_ctx_s
+{
+  uint32 mon_lr;
+  uint32 mon_spsr;
+  uint32 usr_r0;
+  uint32 usr_r1;
+  uint32 usr_r2;
+  uint32 usr_r3;
+  uint32 usr_r4;
+  uint32 usr_r5;
+  uint32 usr_r6;
+  uint32 usr_r7;
+  uint32 usr_r8;
+  uint32 usr_r9;
+  uint32 usr_r10;
+  uint32 usr_r11;
+  uint32 usr_r12;
+  uint32 usr_r13;
+  uint32 usr_r14;
+  uint32 irq_spsr; /* Monitor expects a pointer here for the context saving. */
+  uint32 irq_r13;
+  uint32 irq_r14;
+  uint32 svc_spsr;
+  uint32 svc_r13;
+  uint32 svc_r14;
+  uint32 abt_spsr;
+  uint32 abt_r13;
+  uint32 abt_r14;
+  uint32 und_spsr;
+  uint32 und_r13;
+  uint32 und_r14;
+  uint32 fiq_spsr;
+  uint32 fiq_r8;
+  uint32 fiq_r9;
+  uint32 fiq_r10;
+  uint32 fiq_r11;
+  uint32 fiq_r12;
+  uint32 fiq_r13;
+  uint32 fiq_r14;
+} tzbsp_dump_cpu_ctx_t;
+
+typedef struct tzbsp_dump_buf_s
+{
+  uint32 sc_status[TZBSP_CPU_COUNT];
+  tzbsp_dump_cpu_ctx_t sc_ns[TZBSP_CPU_COUNT];
+  tzbsp_dump_cpu_ctx_t sec;
+} tzbsp_dump_buf_t;
+
+#define TZBSP_IMEM_CTX_BUFFER_ADDR  0x2a05f658
+void* g_tzbsp_ctx_buf_ns_addr = (void*)TZBSP_IMEM_CTX_BUFFER_ADDR;
+tzbsp_dump_buf_t* g_tzbsp_ctx_buf_ns = NULL;
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
+
 /*
  * On the kernel command line specify
  * msm_watchdog.enable=1 to enable the watchdog
@@ -103,6 +160,9 @@ static int msm_watchdog_suspend(struct device *dev)
 	__raw_writel(1, msm_tmr0_base + WDT0_RST);
 	__raw_writel(0, msm_tmr0_base + WDT0_EN);
 	mb();
+
+	printk("MSM WATCHDOG SUSPEND\n");
+
 	return 0;
 }
 
@@ -114,6 +174,9 @@ static int msm_watchdog_resume(struct device *dev)
 	__raw_writel(1, msm_tmr0_base + WDT0_EN);
 	__raw_writel(1, msm_tmr0_base + WDT0_RST);
 	mb();
+
+	printk("MSM WATCHDOG RESUME\n");
+
 	return 0;
 }
 

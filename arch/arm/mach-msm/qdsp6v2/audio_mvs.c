@@ -24,6 +24,11 @@
 #include <linux/msm_audio_mvs.h>
 #include <mach/qdsp6v2/q6voice.h>
 
+#include "audio_mvs_adv.h"
+#ifdef MVS_ADV_SUPPORT
+#include "sky_snd_max9879.h"
+#endif /* MVS_ADV_SUPPORT */
+
 /* Each buffer is 20 ms, queue holds 200 ms of data. */
 #define MVS_MAX_Q_LEN 10
 
@@ -87,6 +92,55 @@ static uint32_t audio_mvs_get_rate(uint32_t mvs_mode, uint32_t rate_type)
 	return cvs_rate;
 }
 
+#ifdef MVS_ADV_SUPPORT
+static void audio_mvs_process_ul_pkt(uint8_t *voc_pkt,
+				     uint32_t pkt_len,
+				     void *private_data)
+{
+	struct audio_mvs_info_type *audio = private_data;
+	unsigned long dsp_flags;
+	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
+       if(mvs_adv_get_state()<MVS_START)      {
+            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.tx.state);   
+            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+            return;
+       }
+       
+	if(audio->mvs_mode==MVS_MODE_AMR) {
+           audio_adv_mvs_process_amr_uplink(voc_pkt, pkt_len, private_data);
+	}
+       else {
+           audio_adv_mvs_process_pcm_uplink(voc_pkt, pkt_len, private_data); 
+       }
+	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+}
+
+static void audio_mvs_process_dl_pkt(uint8_t *voc_pkt,
+				     uint32_t *pkt_len,
+				     void *private_data)
+{
+	struct audio_mvs_info_type *audio = private_data;
+	unsigned long dsp_flags;
+  
+	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
+
+       if(mvs_adv_get_state()<MVS_START)      {
+            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.rx.state);   
+            *pkt_len = 0;
+            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+            return;
+       }
+
+	if(audio->mvs_mode==MVS_MODE_AMR) {
+            audio_adv_mvs_process_amr_downlink(voc_pkt, pkt_len, private_data);
+	}
+       else {
+            audio_adv_mvs_process_pcm_downlink(voc_pkt, pkt_len, private_data);
+       }
+	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+}
+
+#else /* MVS_ADV_SUPPORT */
 static void audio_mvs_process_ul_pkt(uint8_t *voc_pkt,
 				     uint32_t pkt_len,
 				     void *private_data)
@@ -594,6 +648,7 @@ static void audio_mvs_process_dl_pkt(uint8_t *voc_pkt,
 	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
 	wake_up(&audio->in_wait);
 }
+#endif /* MVS_ADV_SUPPORT */
 
 static uint32_t audio_mvs_get_media_type(uint32_t mvs_mode, uint32_t rate_type)
 {
@@ -686,7 +741,11 @@ static uint32_t audio_mvs_get_network_type(uint32_t mvs_mode)
 	case MVS_MODE_PCM:
 	case MVS_MODE_G729A:
 	case MVS_MODE_G711A:
+#ifdef MVS_ADV_SUPPORT
+		network_type = 0x00010021;//VSS_NETWORK_ID_CDMA_NB;
+#else /* MVS_ADV_SUPPORT */
 		network_type = VSS_NETWORK_ID_VOIP_NB;
+#endif /* MVS_ADV_SUPPORT */
 		break;
 
 	case MVS_MODE_4GV_WB:
@@ -716,10 +775,18 @@ static int audio_mvs_start(struct audio_mvs_info_type *audio)
 
 	rc = voice_set_voc_path_full(1);
 
+       #ifdef MVS_ADV_SUPPORT
+       mvs_adv_buf_init();
+       #endif /* MVS_ADV_SUPPORT */
+       
 	if (rc == 0) {
 		voice_register_mvs_cb(audio_mvs_process_ul_pkt,
 				      audio_mvs_process_dl_pkt,
 				      audio);
+
+              #ifdef MVS_ADV_SUPPORT
+              mvs_adv_set_state(MVS_START);
+              #endif /* MVS_ADV_SUPPORT */
 
 		voice_config_vocoder(
 		    audio_mvs_get_media_type(audio->mvs_mode, audio->rate_type),
@@ -742,9 +809,23 @@ static int audio_mvs_stop(struct audio_mvs_info_type *audio)
 
 	pr_info("%s\n", __func__);
 
+#ifdef MVS_ADV_SUPPORT
+	rc = voice_set_voc_path_full(0);
+#else /* MVS_ADV_SUPPORT */
 	voice_set_voc_path_full(0);
+#endif
+#ifdef MVS_ADV_SUPPORT
+    if(rc == 0)  
+#endif /* MVS_ADV_SUPPORT */
+	{
+		audio->state = AUDIO_MVS_STOPPED;
 
-	audio->state = AUDIO_MVS_STOPPED;
+	#ifdef MVS_ADV_SUPPORT
+		mvs_adv_set_state(MVS_STOP);
+	#endif /* MVS_ADV_SUPPORT */
+	} else {
+		pr_err("%s: Error! rc=%d \n", __func__, rc);
+	}
 
 	/* Allow sleep. */
 	wake_unlock(&audio->suspend_lock);
@@ -815,7 +896,15 @@ static int audio_mvs_release(struct inode *inode, struct file *file)
 	mutex_lock(&audio->lock);
 
 	if (audio->state == AUDIO_MVS_STARTED)
+
+#ifdef MVS_ADV_SUPPORT
+		if(audio_mvs_stop(audio)<0) {
+                    mutex_unlock(&audio->lock);
+                    return -ENOMEM;
+              }
+#else /* MVS_ADV_SUPPORT */
 		audio_mvs_stop(audio);
+#endif /* MVS_ADV_SUPPORT */
 
 	/* Free input and output memory. */
 	mutex_lock(&audio->in_lock);
@@ -851,6 +940,10 @@ static int audio_mvs_release(struct inode *inode, struct file *file)
 	audio->memory_chunk = NULL;
 
 	audio->state = AUDIO_MVS_CLOSED;
+
+       #ifdef MVS_ADV_SUPPORT
+       mvs_adv_set_state(MVS_CLOSE);
+       #endif /* MVS_ADV_SUPPORT */
 
 	mutex_unlock(&audio->lock);
 
@@ -1098,6 +1191,32 @@ static long audio_mvs_ioctl(struct file *file,
 
 		break;
 	}
+
+#ifdef MVS_ADV_SUPPORT
+       case AUDIO_GET_CURRENT_STATUS:        {
+              int mvs_state;
+		pr_info("%s: IOCTL GET_CURRENT_STATUS, (%d)\n", __func__, mvs_adv_get_state());
+
+		mutex_lock(&audio->lock);
+              //mvs_state=mvs_adv_get_state()==MVS_START? 1:0;
+              if(snd_extamp_get_current_callmode())    mvs_state=1;
+              else mvs_state=0;
+		mutex_unlock(&audio->lock);
+
+		rc = copy_to_user((void *)arg, &mvs_state, sizeof(mvs_state));
+		if (rc == 0)
+			rc = sizeof(mvs_state);
+		else
+			pr_err("%s: Config copy failed %d\n", __func__, rc);
+              if(mvs_state) {
+                     // This means that previous MVS call was abnormally finished.
+                     // So we reset whole parameters.
+                     voice_set_voc_path_full_reset();
+                     snd_extamp_api_reset();
+              }
+              break;
+       }
+#endif /* MVS_ADV_SUPPORT */
 
 	default: {
 		pr_err("%s: Unknown IOCTL %d\n", __func__, cmd);

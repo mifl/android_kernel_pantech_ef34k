@@ -47,6 +47,15 @@ static struct gpiomux_setting i2c_active = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+// P12095 added 110301
+#if defined(CONFIG_SENSORS_APDS9900_HW)
+static struct gpiomux_setting gsbi5 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+#endif /* CONFIG_SENSORS_APDS9900 */
+
 static struct gpiomux_setting i2c_active_gsbi7 = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_12MA,
@@ -65,6 +74,15 @@ static struct gpiomux_setting gsbi8 = {
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
+
+// P12095 added 110301
+#ifdef CONFIG_SENSORS_MPU3050
+static struct gpiomux_setting gsbi9 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+#endif /* CONFIG_SENSORS_MPU3050 */
 
 static struct gpiomux_setting ps_hold = {
 	.func = GPIOMUX_FUNC_1,
@@ -396,6 +414,14 @@ static struct gpiomux_setting gsbi9 = {
 };
 #endif
 
+#ifdef CONFIG_SKY_BATTERY_MAX17040
+static struct gpiomux_setting GSBI11 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
+
 static struct gpiomux_setting ap2mdm_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -408,6 +434,7 @@ static struct gpiomux_setting mdm2ap_status_cfg = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+#ifndef CONFIG_FB_MSM_MIPI_DSI_MAGNA
 static struct gpiomux_setting mdm2ap_vfr_active_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -419,6 +446,7 @@ static struct gpiomux_setting mdm2ap_vfr_suspend_cfg = {
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_DOWN,
 };
+#endif /* CONFIG_FB_MSM_MIPI_DSI_MAGNA */
 
 static struct gpiomux_setting mdm2ap_errfatal_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -502,6 +530,21 @@ static struct msm_gpiomux_config msm8x60_gsbi_configs[] __initdata = {
 			[GPIOMUX_ACTIVE]    = &i2c_active,
 		},
 	},
+// P12095 added 110301
+#if defined(CONFIG_SENSORS_APDS9900_HW)
+	{
+		.gpio      = 51, // sda
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi5,
+		},
+	},
+	{
+		.gpio      = 52, // scl
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi5,
+		},
+	},
+#endif /* CONFIG_SENSORS_APDS9900 */
 	{
 		.gpio      = 59,
 		.settings = {
@@ -528,6 +571,35 @@ static struct msm_gpiomux_config msm8x60_gsbi_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gsbi8,
 		},
 	},
+#ifdef CONFIG_SKY_BATTERY_MAX17040 //PS2 TEAM SHS : guel gaue porting
+	{
+		.gpio = 104, // sda
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &GSBI11,
+		},
+	},
+	{
+		.gpio = 103, // scl
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &GSBI11,
+		},
+	},
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
+// P12095 added 110301
+#ifdef CONFIG_SENSORS_MPU3050
+	{
+		.gpio      = 68, // sda
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi9,
+		},
+	},
+	{
+		.gpio      = 69, // scl
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi9,
+		},
+	},
+#endif /* CONFIG_SENSORS_MPU3050 */
 };
 
 static struct msm_gpiomux_config msm8x60_fluid_gsbi_configs[] __initdata = {
@@ -567,12 +639,15 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+// P12095 added 110315 // gpio_124 is used for APDS9900
+#if !(defined(CONFIG_SENSORS_APDS9900_SW) || defined(CONFIG_SENSORS_APDS9900_HW))
 	{
 		.gpio      = 124,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#endif /* CONFIG_SENSORS_APDS9900 */
 	{
 		.gpio      = 125,
 		.settings = {
@@ -591,12 +666,14 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#ifndef CONFIG_SKY_BCM_BT
 	{
 		.gpio      = 128,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#endif /* CONFIG_SKY_BCM_BT */
 	{
 		.gpio      = 129,
 		.settings = {
@@ -642,24 +719,29 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#ifndef CONFIG_SKY_BCM_BT
 	{
 		.gpio      = 138,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#endif /* CONFIG_SKY_BCM_BT */
 	{
 		.gpio      = 139,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#ifndef CONFIG_FB_MSM_MIPI_DSI_MAGNA
 	{
 		.gpio      = 140,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#endif /* CONFIG_FB_MSM_MIPI_DSI_MAGNA */
+#if !defined(CONFIG_PN544)
 	{
 		.gpio      = 141,
 		.settings = {
@@ -672,6 +754,7 @@ static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#endif /* CONFIG_PN544 */
 	{
 		.gpio      = 143,
 		.settings = {
@@ -1564,6 +1647,7 @@ static struct msm_gpiomux_config msm8x60_charm_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
 		}
 	},
+#ifndef CONFIG_FB_MSM_MIPI_DSI_MAGNA
 	/* MDM2AP_VFR */
 	{
 		.gpio = 94,
@@ -1572,6 +1656,7 @@ static struct msm_gpiomux_config msm8x60_charm_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &mdm2ap_vfr_suspend_cfg,
 		}
 	},
+#endif /* CONFIG_FB_MSM_MIPI_DSI_MAGNA */
 	/* AP2MDM_STATUS */
 	{
 		.gpio = 136,

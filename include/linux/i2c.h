@@ -564,7 +564,20 @@ struct i2c_msg {
 /*
  * Data for SMBus Messages
  */
+#ifdef CONFIG_TOUCHSCREEN_SAIN_TOUCH
+
+#define I2C_SMBUS_BLOCK_MAX	34	/* As specified in SMBus standard */
+
+//jhkang--
+//#elif CONFIG_TOUCHSCREEN_CYTTSP_I2C
+#elif defined CONFIG_TOUCHSCREEN_CYTTSP_I2C
+//--jhkang
+#define I2C_SMBUS_BLOCK_MAX	255	/* As specified in SMBus standard */
+
+#else
 #define I2C_SMBUS_BLOCK_MAX	32	/* As specified in SMBus standard */
+
+#endif
 union i2c_smbus_data {
 	__u8 byte;
 	__u16 word;

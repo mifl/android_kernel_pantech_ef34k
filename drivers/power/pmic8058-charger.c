@@ -32,6 +32,12 @@
 #include <mach/msm_xo.h>
 #include <mach/msm_hsusb.h>
 
+#ifdef CONFIG_SKY_CHARGING
+#include <mach/mpp.h>
+#include <linux/pmic8058-xoadc.h>
+#include <mach/board-msm8660.h>
+#endif
+
 /* Config Regs  and their bits*/
 #define PM8058_CHG_TEST			0x75
 #define IGNORE_LL			2
@@ -127,6 +133,10 @@
 #define PM8058_CHG_I_TERM_STEP_MA 10
 #define PM8058_CHG_V_STEP_MV 25
 #define PM8058_CHG_V_MIN_MV  2400
+
+
+#define FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+
 /*
  * enum pmic_chg_interrupts: pmic interrupts
  * @CHGVAL_IRQ: charger V between 3.3 and 7.9
@@ -173,6 +183,9 @@ enum pmic_chg_interrupts {
 	BATFET_IRQ,
 	BATT_REPLACE_IRQ,
 	BATTCONNECT_IRQ,
+#ifdef CONFIG_SKY_CHARGING
+	BATTID_IRQ,
+#endif
 	PMIC_CHG_MAX_INTS
 };
 
@@ -204,6 +217,17 @@ struct pm8058_charger {
 static struct pm8058_charger pm8058_chg;
 static struct msm_hardware_charger usb_hw_chg;
 static struct pmic8058_charger_data chg_data;
+
+#ifdef CONFIG_SKY_CHARGING
+static int pm8058_is_battery_id_valid(void);
+/*static*/ int pm8058_is_factory_cable(void);
+static int is_nobattery_with_factory_cable;
+static int save_current;
+static int start_fast_charging = 0;
+extern unsigned int msm_charger_is_incall(void);
+extern int is_lcd_on(void);
+static int sky_plug_state; //ps2 team shs : plug_state function
+#endif
 
 static int msm_battery_gauge_alarm_notify(struct notifier_block *nb,
 					  unsigned long status, void *unused);
@@ -268,9 +292,25 @@ static int pm_chg_get_rt_status(int irq)
 		return ret;
 }
 
+#ifdef CONFIG_SKY_CHARGING 
+//ps2 team shs : add function
+int sky_get_plug_state(void)
+{
+	return sky_plug_state;
+}
+#endif
+
 static int is_chg_plugged_in(void)
 {
+#ifdef CONFIG_SKY_CHARGING 
+	int ret;
+	ret = pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[CHGVAL_IRQ]);
+	
+	sky_plug_state=ret;
+	return ret;
+#else
 	return pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[CHGVAL_IRQ]);
+#endif
 }
 
 #ifdef DEBUG
@@ -469,6 +509,10 @@ static int pm_chg_imaxsel_set(int chg_current)
 	u8 temp;
 	int diff;
 
+#ifdef CONFIG_SKY_CHARGING
+        pr_info("[SKY_CHG] %s: %d\n", __func__, chg_current);
+#endif
+
 	diff = chg_current - PM8058_CHG_I_MIN_MA;
 	if (diff < 0) {
 		dev_warn(pm8058_chg.dev, "%s bad mA=%d asked to set\n",
@@ -484,6 +528,35 @@ static int pm_chg_imaxsel_set(int chg_current)
 	}
 	return pm8xxx_writeb(pm8058_chg.dev->parent, PM8058_CHG_IMAX, temp);
 }
+
+#ifdef CONFIG_SKY_CHARGING
+int pm8058_chg_nobattery_factory_cable(void)
+{
+        return is_nobattery_with_factory_cable;
+}
+
+void pm8058_chg_set_current_incall(int chg_current)
+{
+        pr_info("[SKY_CHG]%s: incall current is %d\n", __func__, chg_current);
+        pm_chg_imaxsel_set(chg_current);
+}
+EXPORT_SYMBOL(pm8058_chg_set_current_incall);
+
+void pm8058_chg_set_current_temperature(int chg_current)
+{
+        static int saved_current = 0;
+
+        if(saved_current == chg_current)
+            return;
+
+        if(!start_fast_charging)
+            return;
+//        pr_info("[SKY_CHG]%s: chg_current %d\n", __func__, chg_current);
+        pm_chg_imaxsel_set(chg_current);
+        saved_current = chg_current;
+}
+EXPORT_SYMBOL(pm8058_chg_set_current_temperature);
+#endif
 
 #define PM8058_CHG_VMAX_MIN  3300
 #define PM8058_CHG_VMAX_MAX  5500
@@ -646,9 +719,13 @@ static int __pm8058_start_charging(int chg_current, int termination_current,
 	if (ret)
 		goto out;
 
+#ifdef CONFIG_SKY_CHARGING
+    save_current = chg_current;
+#else
 	ret = pm_chg_imaxsel_set(chg_current);
 	if (ret)
 		goto out;
+#endif
 
 	ret = pm_chg_failed_clear(1);
 	if (ret)
@@ -666,7 +743,12 @@ static int __pm8058_start_charging(int chg_current, int termination_current,
 	if (ret)
 		goto out;
 
+#ifdef CONFIG_SKY_CHARGING
+	ret = pm_chg_batt_temp_disable(1);
+#else
 	ret = pm_chg_batt_temp_disable(0);
+#endif
+
 	if (ret)
 		goto out;
 
@@ -755,6 +837,10 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 	int vbat_higher_than_vbatdet;
 	int ret = 0;
 
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(pm8058_chg.dev, "%s pm8058_start_charging : current %d \n", __func__,chg_current);
+#endif
+
 	cancel_delayed_work_sync(&pm8058_chg.charging_check_work);
 
 	/*
@@ -762,7 +848,18 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 	 * to 450 and make sure we never cross it
 	 */
 	if (chg_current == 500)
+#ifdef CONFIG_SKY_CHARGING
+		chg_current = 400;
+#else
 		chg_current = 450;
+#endif
+#ifdef CONFIG_SKY_CHARGING
+    if(pm8058_is_factory_cable())
+            chg_current = 700;
+
+    if((chg_current == 900) && is_lcd_on())
+            chg_current = 700;
+#endif
 
 	if (hw_chg->type == CHG_TYPE_AC && chg_data.max_source_current)
 		chg_current = chg_data.max_source_current;
@@ -995,15 +1092,37 @@ static irqreturn_t pm8058_chg_chgstate_handler(int irq, void *dev_id)
 
 static irqreturn_t pm8058_chg_fastchg_handler(int irq, void *dev_id)
 {
+#ifdef CONFIG_SKY_CHARGING
+	int ret = 0;
+#endif
+
 	pm8058_chg_disable_irq(FASTCHG_IRQ);
 
 	/* we have begun the fast charging state */
 	dev_info(pm8058_chg.dev, "%s begin fast charging"
 		, __func__);
+
+#ifdef CONFIG_SKY_CHARGING
+        if(msm_charger_is_incall())
+                save_current = 400;
+
+	dev_info(pm8058_chg.dev, "[SKY CHG]%s begin fast charging, set current %d"
+		, __func__, save_current);
+        
+	ret = pm_chg_imaxsel_set(save_current);
+	if (ret)
+        {   
+                pr_err("fail to pm_chg_imaxsel_set\n");
+        }
+
+        start_fast_charging = 1;
+#endif
+
 	msm_charger_notify_event(&usb_hw_chg, CHG_BATT_BEGIN_FAST_CHARGING);
 	return IRQ_HANDLED;
 }
 
+#ifndef CONFIG_SKY_CHARGING
 static irqreturn_t pm8058_chg_batttemp_handler(int irq, void *dev_id)
 {
 	int ret;
@@ -1028,6 +1147,7 @@ static irqreturn_t pm8058_chg_batttemp_handler(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static irqreturn_t pm8058_chg_vbatdet_handler(int irq, void *dev_id)
 {
@@ -1111,6 +1231,25 @@ static irqreturn_t pm8058_chg_battconnect_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_SKY_CHARGING
+static irqreturn_t pm8058_chg_batt_id_changed_handler(int irq, void *dev_id)
+{
+	int ret;
+
+	ret = pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[BATTID_IRQ]);
+
+        pr_info("[SKY CHG]%s: batt_id_chanded is %d\n", __func__, ret);
+
+	if (ret) {
+		msm_charger_notify_event(&usb_hw_chg, CHG_BATT_REMOVED);
+	}
+
+//	pm8058_chg_disable_irq(BATTID_IRQ);
+    
+	return IRQ_HANDLED;
+}
+#endif
+
 static int get_rt_status(void *data, u64 * val)
 {
 	int i = (int)data;
@@ -1154,7 +1293,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				  res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[CHGVAL] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1174,7 +1313,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  pm8058_chg_chginval_handler,
 				  IRQF_TRIGGER_RISING, res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[CHGINVAL] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1195,7 +1334,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  IRQF_TRIGGER_RISING,
 				  res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[AUTO_CHGDONE] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1215,7 +1354,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  pm8058_chg_auto_chgfail_handler,
 				  IRQF_TRIGGER_RISING, res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[AUTO_CHGFAIL] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1234,7 +1373,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  pm8058_chg_chgstate_handler,
 				  IRQF_TRIGGER_RISING, res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[CHGSTATE] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1253,7 +1392,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  pm8058_chg_fastchg_handler,
 				  IRQF_TRIGGER_RISING, res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[FASTCHG] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1262,6 +1401,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 		}
 	}
 
+#ifndef CONFIG_SKY_CHARGING
 	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "BATTTEMP");
 	if (res == NULL) {
 		dev_err(pm8058_chg.dev,
@@ -1273,7 +1413,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				  res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[BATTTEMP] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1281,6 +1421,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			pm8058_chg_disable_irq(BATTTEMP_IRQ);
 		}
 	}
+#endif
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ,
 					   "BATT_REPLACE");
@@ -1293,7 +1434,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  pm8058_chg_batt_replace_handler,
 				  IRQF_TRIGGER_RISING, res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[BATT_REPLACE] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1313,7 +1454,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				  res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[BATTCONNECT] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1333,7 +1474,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 				  IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				  res->name, NULL);
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[VBATDET] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1341,6 +1482,44 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			pm8058_chg_disable_irq(VBATDET_IRQ);
 		}
 	}
+
+#ifdef CONFIG_SKY_CHARGING
+	{
+		struct pm8xxx_mpp_config_data sky_batt_digital_adc = {
+			.type	= PM8XXX_MPP_TYPE_D_INPUT,
+			.level	= PM8058_MPP_DIG_LEVEL_S3,
+			.control = PM8XXX_MPP_DIN_TO_INT,	
+		};
+
+		ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(7), &sky_batt_digital_adc);
+
+		if (ret < 0) {
+			dev_err(pm8058_chg.dev, "[SKY CHG]%s:couldnt set mpp %d\n",__func__, ret);
+			goto err_out;
+        }
+	}	
+    
+	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "BATT_ID_CHANGED");
+	if (res == NULL) {
+		dev_err(pm8058_chg.dev,
+			"%s:couldnt find resource BATT_ID_CHANGED\n", __func__);
+		goto err_out;
+	} else {
+		ret = request_threaded_irq(res->start, NULL,
+				  pm8058_chg_batt_id_changed_handler,
+				  IRQF_TRIGGER_RISING |IRQF_TRIGGER_FALLING,
+				  res->name, NULL);
+		if (ret < 0) {
+			dev_err(pm8058_chg.dev, "%s:[BATT_ID_CHANGED] couldnt request %d %d\n",
+				__func__, res->start, ret);
+			goto err_out;
+		} else {
+			pm8058_chg.pmic_chg_irq[BATTID_IRQ] = res->start;
+			enable_irq_wake(pm8058_chg.pmic_chg_irq[BATTID_IRQ]);
+			pm8058_chg_disable_irq(BATTID_IRQ);
+		}
+	}
+#endif
 
 	return 0;
 
@@ -1700,6 +1879,25 @@ static int batt_read_adc(int channel, int *mv_reading)
 	struct completion  conv_complete_evt;
 
 	pr_debug("%s: called for %d\n", __func__, channel);
+
+#ifdef CONFIG_SKY_CHARGING
+    if(channel == CHANNEL_ADC_BATT_ID)
+    {
+		struct pm8xxx_mpp_config_data sky_batt_analog_adc = {
+			.type	= PM8XXX_MPP_TYPE_A_INPUT,
+			.level	= PM8XXX_MPP_AIN_AMUX_CH8,
+			.control = PM8XXX_MPP_AOUT_CTRL_DISABLE,	
+		};
+	
+		ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(7), &sky_batt_analog_adc);
+		
+    	if (ret)
+    		pr_err("%s: Config mpp8 on pmic 8058 failed\n", __func__);
+
+            msleep(1);
+    }
+#endif
+
 	ret = adc_channel_open(channel, &h);
 	if (ret) {
 		pr_err("%s: couldnt open channel %d ret=%d\n",
@@ -1729,6 +1927,24 @@ static int batt_read_adc(int channel, int *mv_reading)
 		*mv_reading = adc_chan_result.measurement;
 
 	pr_debug("%s: done for %d\n", __func__, channel);
+
+#ifdef CONFIG_SKY_CHARGING
+	{
+		struct pm8xxx_mpp_config_data sky_batt_digital_adc = {
+			.type	= PM8XXX_MPP_TYPE_D_INPUT,
+			.level	= PM8058_MPP_DIG_LEVEL_S3,
+			.control = PM8XXX_MPP_DIN_TO_INT,	
+		};
+
+		ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(7), &sky_batt_digital_adc);
+
+		if (ret < 0) {
+			pr_err("%s: couldnt mpp setting ret=%d\n",
+				__func__, ret);
+		}
+	}	
+#endif
+
 	return adc_chan_result.physical;
 out:
 	pr_debug("%s: done for %d\n", __func__, channel);
@@ -1736,16 +1952,36 @@ out:
 
 }
 
+#ifdef CONFIG_SKY_CHARGING
+#define BATT_ID_OPEN_MV  500
+#endif
+
 #define BATT_THERM_OPEN_MV  2000
 static int pm8058_is_battery_present(void)
 {
 	int mv_reading;
 
 	mv_reading = 0;
+
+#ifdef CONFIG_SKY_CHARGING
+	batt_read_adc(CHANNEL_ADC_BATT_ID, &mv_reading);
+	pr_info("%s: batt_id is %d\n", __func__, mv_reading);
+	if (mv_reading < BATT_ID_OPEN_MV)
+		return 1;
+#else
 	batt_read_adc(CHANNEL_ADC_BATT_THERM, &mv_reading);
 	pr_debug("%s: therm_raw is %d\n", __func__, mv_reading);
 	if (mv_reading > 0 && mv_reading < BATT_THERM_OPEN_MV)
 		return 1;
+#endif
+
+#ifdef CONFIG_SKY_CHARGING
+	if(pm8058_is_factory_cable())
+	{
+		pm_chg_imaxsel_set(1500);
+		is_nobattery_with_factory_cable = 1;
+	}
+#endif
 
 	return 0;
 }
@@ -1759,6 +1995,10 @@ static int pm8058_get_battery_temperature(void)
 #define BATT_THERM_OPERATIONAL_MIN_CELCIUS 0
 static int pm8058_is_battery_temp_within_range(void)
 {
+// no battery temp
+#ifdef CONFIG_SKY_CHARGING
+        return 1;
+#else
 	int therm_celcius;
 
 	therm_celcius = pm8058_get_battery_temperature();
@@ -1769,6 +2009,7 @@ static int pm8058_is_battery_temp_within_range(void)
 		return 1;
 
 	return 0;
+#endif
 }
 
 #define BATT_ID_MAX_MV  800
@@ -1776,30 +2017,50 @@ static int pm8058_is_battery_temp_within_range(void)
 static int pm8058_is_battery_id_valid(void)
 {
 	int batt_id_mv;
+#ifdef CONFIG_SKY_CHARGING
+	//int cable_id_mv;
+#endif
 
 	batt_id_mv = batt_read_adc(CHANNEL_ADC_BATT_ID, NULL);
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(pm8058_chg.dev,"%s : CHANNEL_ADC_BATT_ID = %d",__func__,batt_id_mv);
 	pr_debug("%s: batt_id_mv is %d\n", __func__, batt_id_mv);
+#endif
 
 	/*
 	 * The readings are not in range
 	 * assume battery is present for now
 	 */
+#ifndef CONFIG_SKY_CHARGING
 	return 1;
+#endif
 
+#ifdef CONFIG_SKY_CHARGING
+	if (batt_id_mv < BATT_ID_OPEN_MV)
+		return 1;
+#else
 	if (batt_id_mv > 0
 		&& batt_id_mv > BATT_ID_MIN_MV
 		&& batt_id_mv < BATT_ID_MAX_MV)
 		return 1;
-
+#endif
 	return 0;
 }
 
 /* returns voltage in mV */
+#ifdef CONFIG_SKY_CHARGING
+extern int max17040_get_voltage(void);
+#endif
 static int pm8058_get_battery_mvolts(void)
 {
 	int vbatt_mv;
 
+#ifdef CONFIG_SKY_CHARGING
+	//ps1 team shs : get volt value from fuel gague
+	vbatt_mv = max17040_get_voltage();
+#else
 	vbatt_mv = batt_read_adc(CHANNEL_ADC_VBATT, NULL);
+#endif
 	pr_debug("%s: vbatt_mv is %d\n", __func__, vbatt_mv);
 	if (vbatt_mv > 0)
 		return vbatt_mv;
@@ -1809,6 +2070,33 @@ static int pm8058_get_battery_mvolts(void)
 	 */
 	return 0;
 }
+
+
+#ifdef FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+#define factory_cable_min 2500
+#define factory_cable_max 3800
+#endif
+
+#ifdef CONFIG_SKY_CHARGING
+/*static*/ int pm8058_is_factory_cable(void)
+{
+	int cable_mv;
+
+	cable_mv = batt_read_adc(CHANNEL_ADC_BATT_AMON, NULL);
+	pr_info("%s: cable_mv is %d\n", __func__, cable_mv);
+#ifdef FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+	if (cable_mv > factory_cable_min && cable_mv < factory_cable_max)
+#else
+	if (cable_mv > 900 && cable_mv < 1600)
+#endif
+	return 1;
+	/*
+	 * return 0 to tell the upper layers
+	 * we couldnt read the battery voltage
+	 */
+	return 0;
+}
+#endif
 
 static int msm_battery_gauge_alarm_notify(struct notifier_block *nb,
 		unsigned long status, void *unused)
@@ -1866,6 +2154,9 @@ static struct msm_battery_gauge pm8058_batt_gauge = {
 	.is_battery_temp_within_range = pm8058_is_battery_temp_within_range,
 	.is_battery_id_valid = pm8058_is_battery_id_valid,
 	.monitor_for_recharging = pm8058_monitor_for_recharging,
+#ifdef CONFIG_SKY_CHARGING
+	.is_factory_cable = pm8058_is_factory_cable,
+#endif
 };
 
 static int pm8058_usb_voltage_lower_limit(void)
@@ -1923,7 +2214,12 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 		goto free_irq;
 	}
 
+// paiksun...
+#ifdef CONFIG_SKY_CHARGING
+	pm_chg_batt_temp_disable(1);
+#else
 	pm_chg_batt_temp_disable(0);
+#endif
 	msm_battery_gauge_register(&pm8058_batt_gauge);
 	__dump_chg_regs();
 
@@ -1938,6 +2234,10 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 
 	pm8058_chg_enable_irq(BATTTEMP_IRQ);
 	pm8058_chg_enable_irq(BATTCONNECT_IRQ);
+
+#ifdef CONFIG_SKY_CHARGING
+	pm8058_chg_enable_irq(BATTID_IRQ);
+#endif
 
 	rc = pm8xxx_batt_alarm_disable(PM8XXX_BATT_ALARM_UPPER_COMPARATOR);
 	if (!rc)

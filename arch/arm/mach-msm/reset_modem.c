@@ -21,6 +21,10 @@
 #include "smd_private.h"
 #include "proc_comm.h"
 
+#if defined(CONFIG_SW_RESET)
+#include "sky_sys_reset.h"
+#endif /* CONFIG_SW_RESET */
+
 #define DEBUG
 /* #undef DEBUG */
 #ifdef DEBUG
@@ -116,7 +120,11 @@ static ssize_t reset_modem_write(struct file *fp, const char __user *buf,
 		  __LINE__,
 		  __func__);
 
+#if defined(CONFIG_SW_RESET)
+		r = sky_sys_rst_UserReset_imm(NULL);
+#else /* CONFIG_SW_RESET */
 		r = msm_proc_comm(PCOM_RESET_CHIP_IMM, &param1, &param2);
+#endif /* CONFIG_SW_RESET */
 
 		if (r < 0)
 			return r;
@@ -131,10 +139,46 @@ static ssize_t reset_modem_write(struct file *fp, const char __user *buf,
 		  __LINE__,
 		  __func__);
 
+#if defined(CONFIG_SW_RESET)
+		r = sky_sys_rst_UserReset(NULL);
+#else /* CONFIG_SW_RESET */
 		r = msm_proc_comm(PCOM_RESET_CHIP, &param1, &param2);
+#endif /* CONFIG_SW_RESET */
 
 		if (r < 0)
 			return r;
+#if defined(CONFIG_SW_RESET)
+	} else if (!strncmp(cmd, "reset sw now", 12)) {
+		uint param1 = 0x0;
+		uint param2 = 0x0;
+
+		D(KERN_ERR "INFO:%s:%i:%s: "
+		  "MODEM SW RESTART: CHIP RESET IMMEDIATE\n",
+		  __FILE__,
+		  __LINE__,
+		  __func__);
+
+		r = sky_sys_rst_SwReset_imm(NULL);
+
+		if (r < 0)
+		{
+			D(KERN_ERR "ERROR: sky_sys_rst_SwReset_imm failed: %d\n", r);
+			return r;
+		}
+	} else if (!strncmp(cmd, "reset sw", 8)) {
+
+		uint param1 = 0x0;
+		uint param2 = 0x0;
+
+		D(KERN_ERR "INFO:%s:%i:%s: "
+		  "MODEM SW RESTART: CHIP RESET \n",
+		  __FILE__,
+		  __LINE__,
+		  __func__);
+
+		BUG();
+		return 0;
+#endif /* CONFIG_SW_RESET */
 	} else if (!strncmp(cmd, "reset", 5)) {
 		printk(KERN_ERR "INFO:%s:%i:%s: "
 		       "MODEM RESTART: RESET\n",

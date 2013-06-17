@@ -30,6 +30,10 @@
 #include "modem_notifier.h"
 #include "ramdump.h"
 
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+#include "sky_sys_reset.h"
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
+
 #define MODEM_HWIO_MSS_RESET_ADDR       0x00902C48
 #define MODULE_NAME			"modem_8660"
 #define MODEM_WDOG_ENABLE		0x10020008
@@ -130,6 +134,9 @@ static int modem_notif_handler(struct notifier_block *this,
 				void *_cmd)
 {
 	if (code == MODEM_NOTIFIER_START_RESET) {
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+		sky_reset_reason=SYS_RESET_REASON_EXCEPTION;
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
 		if (ignore_smsm_ack) {
 			ignore_smsm_ack = 0;
 			goto out;

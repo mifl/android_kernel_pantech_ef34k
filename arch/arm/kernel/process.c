@@ -143,7 +143,14 @@ void arm_machine_restart(char mode, const char *cmd)
 	 * we may need it to insert some 1:1 mappings so that
 	 * soft boot works.
 	 */
+
+	 /* P11175 blocked 
+	 setup_mm_for_reboot() sometimes makes watchdog error when target reset.
+	 After model EF33S, you should check this function.
+	 */
+#ifndef CONFIG_PANTECH_SKY	 
 	setup_mm_for_reboot(mode);
+#endif /* CONFIG_PANTECH_SKY */
 
 	/* Clean and invalidate caches */
 	flush_cache_all();
@@ -365,6 +372,78 @@ static void show_extra_register_data(struct pt_regs *regs, int nbytes)
 	show_data(regs->ARM_r10 - nbytes, nbytes * 2, "R10");
 	set_fs(fs);
 }
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+
+#define LINUX_SAVE_INFO_MAGIC 0xBADC0257
+
+struct mmu_type {
+	unsigned int control;
+	unsigned int transbase0;
+	unsigned int dac;
+	unsigned int transbase1;
+	unsigned int prrr;
+	unsigned int nmrr;
+};
+
+struct save_info_type {
+	unsigned int magic_num;
+	struct pt_regs regs[2];
+	struct mmu_type mmu[2];
+	unsigned int die_cpu;
+};
+
+static struct save_info_type smp_save_info;
+
+void __save_regs_and_mmu(struct pt_regs *regs, bool is_die)
+{
+    int cpu = smp_processor_id();
+	
+	memset((unsigned char *)&smp_save_info.regs[cpu], 0, sizeof(struct pt_regs));
+	memcpy((unsigned char *)&smp_save_info.regs[cpu], (unsigned char *)regs, sizeof(struct pt_regs));
+
+	asm("mrc p15,0,%0,c1,c0,0" : "=r" (smp_save_info.mmu[cpu].control));
+	asm("mrc p15,0,%0,c2,c0,0" : "=r" (smp_save_info.mmu[cpu].transbase0));
+	asm("mrc p15,0,%0,c3,c0,0" : "=r" (smp_save_info.mmu[cpu].dac));
+	asm("mrc p15,0,%0,c2,c0,1" : "=r" (smp_save_info.mmu[cpu].transbase1));
+	asm("mrc p15,0,%0,c10,c2,0" : "=r" (smp_save_info.mmu[cpu].prrr));
+	asm("mrc p15,0,%0,c10,c2,1" : "=r" (smp_save_info.mmu[cpu].nmrr));
+
+    if(is_die){
+		smp_save_info.die_cpu = cpu;
+    }
+	
+	smp_save_info.magic_num = LINUX_SAVE_INFO_MAGIC;
+}
+
+void __save_regs_and_mmu_in_panic(void)
+{
+    int cpu = smp_processor_id();
+	
+    if(smp_save_info.magic_num == LINUX_SAVE_INFO_MAGIC)
+		return;
+
+	memset((unsigned char *)&smp_save_info.regs[cpu], 0, sizeof(struct pt_regs));
+	
+	asm volatile("\
+	stmia	%0, {r0-r12,sp,lr,pc}"	
+	:
+	: "r" (&smp_save_info.regs[cpu]));
+	
+	__asm__ volatile("mrs	%0, cpsr" : "=r" (smp_save_info.regs[cpu].uregs[16]));
+
+	asm("mrc p15,0,%0,c1,c0,0" : "=r" (smp_save_info.mmu[cpu].control));
+	asm("mrc p15,0,%0,c2,c0,0" : "=r" (smp_save_info.mmu[cpu].transbase0));
+	asm("mrc p15,0,%0,c3,c0,0" : "=r" (smp_save_info.mmu[cpu].dac));
+	asm("mrc p15,0,%0,c2,c0,1" : "=r" (smp_save_info.mmu[cpu].transbase1));
+	asm("mrc p15,0,%0,c10,c2,0" : "=r" (smp_save_info.mmu[cpu].prrr));
+	asm("mrc p15,0,%0,c10,c2,1" : "=r" (smp_save_info.mmu[cpu].nmrr));
+
+	smp_save_info.die_cpu = cpu;
+	
+	smp_save_info.magic_num = LINUX_SAVE_INFO_MAGIC;
+}
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 
 void __show_regs(struct pt_regs *regs)
 {

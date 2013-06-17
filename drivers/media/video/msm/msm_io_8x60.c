@@ -92,9 +92,19 @@ static struct clk *camio_vpe_pclk;
 static struct regulator *fs_vfe;
 static struct regulator *fs_ijpeg;
 static struct regulator *fs_vpe;
+//WSH, build error로 임시로 막음. 
+#if 0
 static struct regulator *ldo15;
 static struct regulator *lvs0;
 static struct regulator *ldo25;
+#endif
+#ifdef F_SKYCAM_ICP_HD
+static struct regulator *s2b12;
+static struct regulator *lvs3b18;
+static struct regulator *mvs0b18;
+static struct regulator *l2b28;
+static struct regulator *l3b28;
+#endif
 
 static struct msm_camera_io_ext camio_ext;
 static struct msm_camera_io_clk camio_clk;
@@ -103,6 +113,143 @@ static struct resource *csiio;
 void __iomem *csibase;
 static int vpe_clk_rate;
 struct msm_bus_scale_pdata *cam_bus_scale_table;
+
+//WSH임시 
+#if 1 
+static struct msm_bus_vectors cam_init_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_preview_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_video_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+};
+
+static struct msm_bus_vectors cam_snapshot_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+	{
+		.src = MSM_BUS_MASTER_VFE,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_VPE,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_JPEG_ENC,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 1521190000,
+		.ib  = 1521190000,
+	},
+};
+
+static struct msm_bus_paths cam_bus_client_config[] = {
+	{
+		ARRAY_SIZE(cam_init_vectors),
+		cam_init_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_preview_vectors),
+		cam_preview_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_video_vectors),
+		cam_video_vectors,
+	},
+	{
+		ARRAY_SIZE(cam_snapshot_vectors),
+		cam_snapshot_vectors,
+	},
+};
+
+
+static struct msm_bus_scale_pdata cam_bus_client_pdata = {
+		cam_bus_client_config,
+		ARRAY_SIZE(cam_bus_client_config),
+		.name = "msm_camera",
+};
+#endif
 
 void msm_io_w(u32 data, void __iomem *addr)
 {
@@ -182,6 +329,7 @@ void msm_io_memcpy(void __iomem *dest_addr, void __iomem *src_addr, u32 len)
 
 static void msm_camera_vreg_enable(void)
 {
+#if 0	
 	ldo15 = regulator_get(NULL, "8058_l15");
 	if (IS_ERR(ldo15)) {
 		pr_err("%s: VREG LDO15 get failed\n", __func__);
@@ -222,7 +370,73 @@ static void msm_camera_vreg_enable(void)
 		pr_err("%s: VREG LDO25 enable failed\n", __func__);
 		goto ldo25_put;
 	}
+#endif
+#ifdef F_SKYCAM_ICP_HD
+	s2b12 = regulator_get(NULL, "8901_s2");
+	if (IS_ERR(s2b12)) {
+		CDBG("%s: VREG s2b12 get failed\n", __func__);
+		s2b12 = NULL;
+		return;
+	}
+	if (regulator_set_voltage(s2b12, 1300000, 1300000)) {
+		CDBG("%s: VREG s2b12 set voltage failed\n",  __func__);
+		regulator_disable(s2b12);
+	}
+	if (regulator_enable(s2b12)) {
+		CDBG("%s: VREG s2b12 enable failed\n", __func__);
+		regulator_put(s2b12);	
+	}
 
+	lvs3b18 = regulator_get(NULL, "8901_lvs3");
+	if (IS_ERR(lvs3b18)) {
+		CDBG("%s: VREG lvs3b18 get failed\n", __func__);
+		lvs3b18 = NULL;
+		return;
+	}
+	if (regulator_enable(lvs3b18)) {
+		CDBG("%s: VREG lvs3b18 enable failed\n", __func__);
+		regulator_disable(lvs3b18);
+	}
+	mvs0b18 = regulator_get(NULL, "8901_mvs0");
+	if (IS_ERR(mvs0b18)) {
+		CDBG("%s: VREG mvs0b18 get failed\n", __func__);
+		mvs0b18 = NULL;
+		return;
+	}
+	if (regulator_enable(mvs0b18)) {
+		CDBG("%s: VREG mvs0b18 enable failed\n", __func__);
+		regulator_disable(mvs0b18);
+	}
+	l2b28 = regulator_get(NULL, "8901_l2");
+	if (IS_ERR(l2b28)) {
+		CDBG("%s: VREG l2b28 get failed\n", __func__);
+		l2b28 = NULL;
+		return;
+	}
+	if (regulator_set_voltage(l2b28, 2800000, 2800000)) {
+		CDBG("%s: VREG s2b12 set voltage failed\n",  __func__);
+		regulator_disable(l2b28);
+	}
+	if (regulator_enable(l2b28)) {
+		CDBG("%s: VREG s2b12 enable failed\n", __func__);
+		regulator_put(l2b28);	
+	}
+	l3b28 = regulator_get(NULL, "8901_l3");
+	if (IS_ERR(l3b28)) {
+		CDBG("%s: VREG l3b28 get failed\n", __func__);
+		l3b28 = NULL;
+		return;
+	}
+	if (regulator_set_voltage(l3b28, 2800000, 2800000)) {
+		CDBG("%s: VREG l3b28 set voltage failed\n",  __func__);
+		regulator_disable(l3b28);
+	}
+	if (regulator_enable(l3b28)) {
+		CDBG("%s: VREG l3b28 enable failed\n", __func__);
+		regulator_put(l3b28);	
+	}
+	
+#endif	
 	fs_vfe = regulator_get(NULL, "fs_vfe");
 	if (IS_ERR(fs_vfe)) {
 		CDBG("%s: Regulator FS_VFE get failed %ld\n", __func__,
@@ -234,6 +448,7 @@ static void msm_camera_vreg_enable(void)
 	}
 	return;
 
+#if 0//def F_SKYCAM_ICP_HD
 ldo25_disable:
 	regulator_disable(ldo25);
 ldo25_put:
@@ -246,10 +461,12 @@ ldo15_disable:
 	regulator_disable(ldo15);
 ldo15_put:
 	regulator_put(ldo15);
+#endif	
 }
 
 static void msm_camera_vreg_disable(void)
 {
+#if 0
 	if (ldo15) {
 		regulator_disable(ldo15);
 		regulator_put(ldo15);
@@ -264,7 +481,27 @@ static void msm_camera_vreg_disable(void)
 		regulator_disable(ldo25);
 		regulator_put(ldo25);
 	}
-
+#endif	
+#ifdef F_SKYCAM_ICP_HD
+	if (s2b12) {
+		regulator_disable(s2b12);
+		regulator_put(s2b12);
+	}
+	if (lvs3b18) {
+		regulator_disable(lvs3b18);
+	}
+	if (mvs0b18) {
+		regulator_disable(mvs0b18);
+	}
+	if (l2b28) {
+		regulator_disable(l2b28);
+		regulator_put(l2b28);
+	}
+	if (l3b28) {
+		regulator_disable(l3b28);
+		regulator_put(l3b28);
+	}
+#endif
 	if (fs_vfe) {
 		regulator_disable(fs_vfe);
 		regulator_put(fs_vfe);
@@ -819,7 +1056,9 @@ void msm_camio_set_perf_lvl(enum msm_bus_perf_setting perf_setting)
 	switch (perf_setting) {
 	case S_INIT:
 		bus_perf_client =
-			msm_bus_scale_register_client(cam_bus_scale_table);
+//WSH임시 
+//		msm_bus_scale_register_client(cam_bus_scale_table);
+		msm_bus_scale_register_client(&cam_bus_client_pdata);
 		if (!bus_perf_client) {
 			pr_err("%s: Registration Failed!!!\n", __func__);
 			bus_perf_client = 0;

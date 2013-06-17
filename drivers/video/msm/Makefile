@@ -69,19 +69,20 @@ msm_mipi-objs := mipi_dsi.o mipi_dsi_host.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI) += msm_mipi.o
 
 # MIPI manufacture
-obj-$(CONFIG_FB_MSM_MIPI_DSI_TOSHIBA) += mipi_toshiba.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_NOVATEK) += mipi_novatek.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_RENESAS) += mipi_renesas.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_TRULY) += mipi_truly.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_SIMULATOR) += mipi_simulator.o
+obj-$(CONFIG_FB_MSM_MIPI_DSI_MAGNA) += mipi_magna.o
+#obj-$(CONFIG_FB_MSM_MIPI_DSI_TOSHIBA) += mipi_toshiba.o
+#obj-$(CONFIG_FB_MSM_MIPI_DSI_NOVATEK) += mipi_novatek.o
+#obj-$(CONFIG_FB_MSM_MIPI_DSI_RENESAS) += mipi_renesas.o
+#obj-$(CONFIG_FB_MSM_MIPI_DSI_TRULY) += mipi_truly.o
+#obj-$(CONFIG_FB_MSM_MIPI_DSI_SIMULATOR) += mipi_simulator.o
 
 # MIPI Bridge
 obj-$(CONFIG_FB_MSM_MIPI_DSI_TC358764_DSI2LVDS) += mipi_tc358764_dsi2lvds.o
 
 # TVEnc
-obj-$(CONFIG_FB_MSM_TVOUT) += tvenc.o
+#obj-$(CONFIG_FB_MSM_TVOUT) += tvenc.o
 ifeq ($(CONFIG_FB_MSM_OVERLAY),y)
-obj-$(CONFIG_FB_MSM_TVOUT) += mdp4_overlay_atv.o
+#obj-$(CONFIG_FB_MSM_TVOUT) += mdp4_overlay_atv.o
 endif
 
 # MSM FB Panel
@@ -110,28 +111,30 @@ obj-$(CONFIG_FB_MSM_MDDI_QUICKVX) += mddi_quickvx.o
 endif
 
 ifeq ($(CONFIG_FB_MSM_MIPI_PANEL_DETECT),y)
-obj-y += mipi_toshiba_video_wvga_pt.o mipi_toshiba_video_wsvga_pt.o mipi_toshiba_video_wuxga.o
-obj-y += mipi_novatek_video_qhd_pt.o mipi_novatek_cmd_qhd_pt.o
-obj-y += mipi_renesas_video_fwvga_pt.o mipi_renesas_cmd_fwvga_pt.o
-obj-y += mipi_chimei_wxga_pt.o
-obj-y += mipi_truly_video_wvga_pt.o
+obj-y += mipi_magna_video_wvga.o
+# [PS3] Kang Seong-Goo, I think this below line does not need.
+#obj-y += mipi_toshiba_video_wvga_pt.o mipi_novatek_video_qhd_pt.o
+#obj-y += mipi_renesas_video_fwvga_pt.o mipi_renesas_cmd_fwvga_pt.o
+#obj-y += mipi_chimei_wxga_pt.o
+#obj-y += mipi_truly_video_wvga_pt.o
 else
-obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT) += mipi_toshiba_video_wvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT) += mipi_toshiba_video_wsvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WUXGA) += mipi_toshiba_video_wuxga.o
-obj-$(CONFIG_FB_MSM_MIPI_NOVATEK_VIDEO_QHD_PT) += mipi_novatek_video_qhd_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_NOVATEK_CMD_QHD_PT) += mipi_novatek_cmd_qhd_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_RENESAS_VIDEO_FWVGA_PT) += mipi_renesas_video_fwvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_RENESAS_CMD_FWVGA_PT) += mipi_renesas_cmd_fwvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_TRULY_VIDEO_WVGA_PT) += mipi_truly_video_wvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_SIMULATOR_VIDEO) += mipi_simulator_video.o
-obj-$(CONFIG_FB_MSM_MIPI_CHIMEI_WXGA) += mipi_chimei_wxga_pt.o
+obj-$(CONFIG_FB_MSM_MIPI_MAGNA_VIDEO_WVGA) += mipi_magna_video_wvga.o
+#obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT) += mipi_toshiba_video_wvga_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT) += mipi_toshiba_video_wsvga_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WUXGA) += mipi_toshiba_video_wuxga.o
+#obj-$(CONFIG_FB_MSM_MIPI_NOVATEK_VIDEO_QHD_PT) += mipi_novatek_video_qhd_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_NOVATEK_CMD_QHD_PT) += mipi_novatek_cmd_qhd_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_RENESAS_VIDEO_FWVGA_PT) += mipi_renesas_video_fwvga_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_RENESAS_CMD_FWVGA_PT) += mipi_renesas_cmd_fwvga_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_TRULY_VIDEO_WVGA_PT) += mipi_truly_video_wvga_pt.o
+#obj-$(CONFIG_FB_MSM_MIPI_SIMULATOR_VIDEO) += mipi_simulator_video.o
+#obj-$(CONFIG_FB_MSM_MIPI_CHIMEI_WXGA) += mipi_chimei_wxga_pt.o
 endif
 
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o
 obj-$(CONFIG_FB_MSM_LCDC_PRISM_WVGA) += lcdc_prism.o
 obj-$(CONFIG_FB_MSM_LCDC_SAMSUNG_WSVGA) += lcdc_samsung_wsvga.o
-obj-$(CONFIG_FB_MSM_LCDC_CHIMEI_WXGA) += lcdc_chimei_wxga.o
+#obj-$(CONFIG_FB_MSM_LCDC_CHIMEI_WXGA) += lcdc_chimei_wxga.o
 obj-$(CONFIG_FB_MSM_LCDC_NT35582_WVGA) += lcdc_nt35582_wvga.o
 obj-$(CONFIG_FB_MSM_LCDC_EXTERNAL_WXGA) += lcdc_external.o
 obj-$(CONFIG_FB_MSM_HDMI_SII_EXTERNAL_720P) += hdmi_sii9022.o

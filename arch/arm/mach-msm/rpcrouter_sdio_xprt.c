@@ -400,6 +400,11 @@ static int rpcrouter_sdio_remote_close(void)
 	flush_workqueue(sdio_xprt_read_workqueue);
 	sdio_close(sdio_remote_xprt.channel->handle);
 	free_sdio_xprt(sdio_remote_xprt.channel);
+
+#ifdef MODEL_SKY
+	sdio_remote_xprt.channel=NULL; //Add 
+#endif /* MODEL_SKY */
+	
 	return 0;
 }
 

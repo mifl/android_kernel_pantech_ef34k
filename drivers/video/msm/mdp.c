@@ -2635,4 +2635,45 @@ static int __init mdp_driver_init(void)
 
 }
 
+#if defined(CONFIG_PANTECH_ERROR_LOG) || defined(CONFIG_PANTECH_ERR_CRASH_LOGGING)
+extern struct fb_info *registered_fb[FB_MAX]; 
+void force_mdp_on(void)
+{    
+    struct fb_info *info; 
+    struct msm_fb_data_type *mfd; 
+	struct msm_fb_panel_data *pdata;
+
+    info = registered_fb[0];
+    mfd = (struct msm_fb_data_type *)info->par;
+	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+
+    if (!mfd->panel_power_on) {
+        //mdp_on(mfd->pdev);
+        mdp4_dsi_video_on(mfd->pdev);
+        //mdp4_dsi_video_overlay(mfd);
+        if ((pdata) && (pdata->set_backlight)) {
+            mfd->bl_level = mfd->panel_info.bl_max;
+            pdata->set_backlight(mfd);
+        }
+    }
+    // stop more display
+    mfd->dma_fnc = NULL;
+}
+EXPORT_SYMBOL(force_mdp_on);
+#endif
+
+#ifdef CONFIG_SKY_CHARGING
+int is_lcd_on(void)
+{
+        struct fb_info *info;
+        struct msm_fb_data_type *mfd;
+
+        info = registered_fb[0];
+        mfd = (struct msm_fb_data_type *)info->par;
+
+        return mfd->panel_power_on;
+}
+EXPORT_SYMBOL(is_lcd_on);
+#endif
+
 module_init(mdp_driver_init);

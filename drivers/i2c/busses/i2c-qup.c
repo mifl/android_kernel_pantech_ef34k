@@ -39,6 +39,10 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.2");
 MODULE_ALIAS("platform:i2c_qup");
 
+#if defined(CONFIG_EF33_BOARD) || defined(CONFIG_EF34_BOARD) || defined(CONFIG_EF35_BOARD)  || defined(CONFIG_EF40_BOARD)
+//#define QUP_I2C_SPINLOCK_ENABLE // 110318 P12095 disabled after QCT branch 1080 ver.
+#define QUP_I2C_PATCH_ENABLE
+#endif /* CONFIG_EF33_BOARD */
 /* QUP Registers */
 enum {
 	QUP_CONFIG              = 0x0,
@@ -166,6 +170,10 @@ struct qup_i2c_dev {
 	struct mutex                 mlock;
 	void                         *complete;
 	int                          i2c_gpios[ARRAY_SIZE(i2c_rsrcs)];
+
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+	spinlock_t slock;  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 };
 
 #ifdef DEBUG
@@ -195,6 +203,10 @@ qup_i2c_interrupt(int irq, void *devid)
 	uint32_t op_flgs = readl_relaxed(dev->base + QUP_OPERATIONAL);
 	int err = 0;
 
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+	spin_lock(&dev->slock); //p11171 dongseok added  
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
+
 	if (!dev->msg || !dev->complete) {
 		/* Clear Error interrupt if it's a level triggered interrupt*/
 		if (dev->num_irqs == 1) {
@@ -202,6 +214,9 @@ qup_i2c_interrupt(int irq, void *devid)
 			/* Ensure that state is written before ISR exits */
 			mb();
 		}
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+        spin_unlock(&dev->slock);  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 		return IRQ_HANDLED;
 	}
 
@@ -234,8 +249,12 @@ qup_i2c_interrupt(int irq, void *devid)
 	}
 
 	if ((dev->num_irqs == 3) && (dev->msg->flags == I2C_M_RD)
-		&& (irq == dev->out_irq))
+		&& (irq == dev->out_irq)) {
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+		spin_unlock(&dev->slock);  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 		return IRQ_HANDLED;
+       }
 	if (op_flgs & QUP_OUT_SVC_FLAG) {
 		writel_relaxed(QUP_OUT_SVC_FLAG, dev->base + QUP_OPERATIONAL);
 		/* Ensure that service flag is acknowledged before ISR exits */
@@ -250,8 +269,12 @@ qup_i2c_interrupt(int irq, void *devid)
 			 * exits
 			 */
 			mb();
-		} else
+		} else {
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+            spin_unlock(&dev->slock);  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 			return IRQ_HANDLED;
+		}
 	}
 
 intr_done:
@@ -260,6 +283,10 @@ intr_done:
 	qup_print_status(dev);
 	dev->err = err;
 	complete(dev->complete);
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+    spin_unlock(&dev->slock);  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
+
 	return IRQ_HANDLED;
 }
 
@@ -759,6 +786,9 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	int rem = num;
 	long timeout;
 	int err;
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+    unsigned long flags;  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 
 	del_timer_sync(&dev->pwr_timer);
 	mutex_lock(&dev->mlock);
@@ -823,6 +853,7 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				dev->out_blk_sz, dev->out_fifo_sz);
 	}
 
+#ifdef QUP_I2C_PATCH_ENABLE
 	writel_relaxed(1, dev->base + QUP_SW_RESET);
 	ret = qup_i2c_poll_state(dev, QUP_RESET_STATE, false);
 	if (ret) {
@@ -835,6 +866,19 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		enable_irq(dev->out_irq);
 	}
 	enable_irq(dev->err_irq);
+#else /* QUP_I2C_SPINLOCK_ENABLE */
+	if (dev->num_irqs == 3) {
+		enable_irq(dev->in_irq);
+		enable_irq(dev->out_irq);
+	}
+	enable_irq(dev->err_irq);
+	writel_relaxed(1, dev->base + QUP_SW_RESET);
+	ret = qup_i2c_poll_state(dev, QUP_RESET_STATE,false);
+	if (ret) {
+		dev_err(dev->dev, "QUP Busy:Trying to recover\n");
+		goto out_err;
+	}
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 
 	/* Initialize QUP registers */
 	writel_relaxed(0, dev->base + QUP_CONFIG);
@@ -849,14 +893,18 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 	while (rem) {
 		bool filled = false;
-
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+        spin_lock_irqsave(&dev->slock, flags); //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 		dev->cnt = msgs->len - dev->pos;
 		dev->msg = msgs;
 
 		dev->wr_sz = dev->out_fifo_sz;
 		dev->err = 0;
 		dev->complete = &complete;
-
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+        spin_unlock_irqrestore(&dev->slock, flags); //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 		if (qup_i2c_poll_state(dev, QUP_I2C_MAST_GEN, false) != 0) {
 			ret = -EIO;
 			goto out_err;
@@ -1069,16 +1117,33 @@ timeout_err:
 
 	ret = num;
  out_err:
-	disable_irq(dev->err_irq);
-	if (dev->num_irqs == 3) {
-		disable_irq(dev->in_irq);
-		disable_irq(dev->out_irq);
-	}
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+    spin_lock_irqsave(&dev->slock, flags);  //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
+
+#ifdef QUP_I2C_PATCH_ENABLE
+#else /* QUP_I2C_PATCH_ENABLE */
 	dev->complete = NULL;
 	dev->msg = NULL;
 	dev->pos = 0;
 	dev->err = 0;
 	dev->cnt = 0;
+#endif /* QUP_I2C_PATCH_ENABLE */
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+    spin_unlock_irqrestore(&dev->slock, flags);   //p11171 dongseok added  
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
+	disable_irq(dev->err_irq);
+	if (dev->num_irqs == 3) {
+		disable_irq(dev->in_irq);
+		disable_irq(dev->out_irq);
+	}
+#ifdef QUP_I2C_PATCH_ENABLE
+	dev->complete = NULL;
+	dev->msg = NULL;
+	dev->pos = 0;
+	dev->err = 0;
+	dev->cnt = 0;
+#endif /* QUP_I2C_PATCH_ENABLE */
 	dev->pwr_timer.expires = jiffies + 3*HZ;
 	add_timer(&dev->pwr_timer);
 	mutex_unlock(&dev->mlock);
@@ -1295,6 +1360,10 @@ qup_i2c_probe(struct platform_device *pdev)
 	mutex_init(&dev->mlock);
 	dev->clk_state = 0;
 	setup_timer(&dev->pwr_timer, qup_i2c_pwr_timer, (unsigned long) dev);
+
+#ifdef QUP_I2C_SPINLOCK_ENABLE
+    spin_lock_init(&dev->slock); //p11171 dongseok added
+#endif /* QUP_I2C_SPINLOCK_ENABLE */
 
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);

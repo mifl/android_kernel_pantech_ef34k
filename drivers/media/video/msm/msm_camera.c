@@ -59,6 +59,9 @@ static uint32_t sensor_mount_angle[MSM_MAX_CAMERA_SENSORS];
 
 struct ion_client *client_for_ion;
 
+// PANTECH
+// forever add CONFIG_MSM_CAMERA_DEBUG Feature to remove the warning...
+#ifdef CONFIG_MSM_CAMERA_DEBUG
 static const char *vfe_config_cmd[] = {
 	"CMD_GENERAL",  /* 0 */
 	"CMD_AXI_CFG_OUT1",
@@ -106,6 +109,8 @@ static const char *vfe_config_cmd[] = {
 	"CMD_AXI_CFG_SNAP_VPE",
 	"CMD_AXI_CFG_SNAP_THUMB_VPE",
 };
+#endif
+
 #define __CONTAINS(r, v, l, field) ({				\
 	typeof(r) __r = r;					\
 	typeof(v) __v = v;					\
@@ -3085,7 +3090,11 @@ static int __msm_release(struct msm_sync *sync)
 		msm_queue_drain(&sync->event_q, list_config);
 
 		wake_unlock(&sync->wake_lock);
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+		wake_unlock(&sync->suspendlock);
+#endif
 		sync->apps_id = NULL;
+		pr_info("%s: completed\n", __func__);
 		sync->core_powered_on = 0;
 	}
 	mutex_unlock(&sync->lock);
@@ -3104,6 +3113,7 @@ static int msm_release_config(struct inode *node, struct file *filep)
 		msm_queue_drain(&pmsm->sync->event_q, list_config);
 		atomic_set(&pmsm->opened, 0);
 	}
+	pr_info("%s, completed\n", __func__);
 	return rc;
 }
 
@@ -3125,6 +3135,13 @@ static int msm_release_control(struct inode *node, struct file *filep)
 		msm_queue_drain(&ctrl_pmsm->ctrl_q, list_control);
 		kfree(ctrl_pmsm);
 	}
+#ifdef F_SKYCAM_FIX_MSM_OPEN_FAIL
+     if (!rc) {
+                  msm_queue_drain(&pmsm->sync->event_q, list_config);
+                  atomic_set(&pmsm->opened, 0);
+     }
+#endif    
+		pr_info("%s, completed\n", __func__);
 	return rc;
 }
 
@@ -3745,6 +3762,9 @@ static int __msm_open(struct msm_cam_device *pmsm, const char *const apps_id,
 
 	if (!sync->core_powered_on && !is_controlnode) {
 		wake_lock(&sync->wake_lock);
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+		wake_lock(&sync->suspendlock);
+#endif
 
 		msm_camvfe_fn_init(&sync->vfefn, sync);
 		if (sync->vfefn.vfe_init) {
@@ -3760,7 +3780,10 @@ static int __msm_open(struct msm_cam_device *pmsm, const char *const apps_id,
 			if (rc < 0) {
 				pr_err("%s: sensor init failed: %d\n",
 					__func__, rc);
+#ifdef F_SKYCAM_FIX_MSM_OPEN_FAIL				 
+				pr_info("%s, msm_camio_sensor_clk_off\n", __func__);
 				msm_camio_sensor_clk_off(sync->pdev);
+#endif				
 				goto msm_open_err;
 			}
 			rc = sync->vfefn.vfe_init(&msm_vfe_s,
@@ -3828,8 +3851,24 @@ static int msm_open_common(struct inode *inode, struct file *filep,
 	}
 
 	rc = __msm_open(pmsm, MSM_APPS_ID_PROP, is_controlnode);
+#ifdef F_SKYCAM_FIX_MSM_OPEN_FAIL
+         if (rc < 0)
+         {
+                      if(is_controlnode)
+                      {                      		 
+                                   return rc;
+                      }
+                      else
+                      {
+                                   filep->private_data = pmsm;
+                                   msm_release_config(inode, filep);
+                                   return rc;
+                      }
+         }
+#else	
 	if (rc < 0)
 		return rc;
+#endif	
 	filep->private_data = pmsm;
 	CDBG("%s: rc %d\n", __func__, rc);
 	return rc;
@@ -3959,10 +3998,16 @@ static int msm_sync_init(struct msm_sync *sync,
 	msm_queue_init(&sync->vpe_q, "vpe");
 
 	wake_lock_init(&sync->wake_lock, WAKE_LOCK_IDLE, "msm_camera");
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+	wake_lock_init(&sync->suspendlock, WAKE_LOCK_SUSPEND, "msm_camera_suspend");
+#endif
 
 	rc = msm_camio_probe_on(pdev);
 	if (rc < 0) {
 		wake_lock_destroy(&sync->wake_lock);
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+		wake_lock_destroy(&sync->suspendlock);
+#endif
 		return rc;
 	}
 	rc = sensor_probe(sync->sdata, &sctrl);
@@ -3976,6 +4021,9 @@ static int msm_sync_init(struct msm_sync *sync,
 			__func__,
 			sync->sdata->sensor_name);
 		wake_lock_destroy(&sync->wake_lock);
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+		wake_lock_destroy(&sync->suspendlock);
+#endif
 		return rc;
 	}
 
@@ -3995,6 +4043,10 @@ static int msm_sync_init(struct msm_sync *sync,
 static int msm_sync_destroy(struct msm_sync *sync)
 {
 	wake_lock_destroy(&sync->wake_lock);
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+	wake_lock_destroy(&sync->suspendlock);
+#endif
+
 	return 0;
 }
 

@@ -296,7 +296,14 @@ static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
 		return USB_CHG_TYPE__SDP;
 }
 
+#ifdef CONFIG_SKY_CHARGING
+#define USB_WALLCHARGER_CHG_CURRENT 900
+#else
 #define USB_WALLCHARGER_CHG_CURRENT 1800
+#endif
+
+extern int pm8058_is_factory_cable(void);
+
 static int usb_get_max_power(struct usb_info *ui)
 {
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
@@ -305,6 +312,9 @@ static int usb_get_max_power(struct usb_info *ui)
 	int suspended;
 	int configured;
 	unsigned bmaxpow;
+#ifdef CONFIG_SKY_CHARGING
+	int factory_check;
+#endif
 
 	if (ui->gadget.is_a_peripheral)
 		return -EINVAL;
@@ -321,6 +331,18 @@ static int usb_get_max_power(struct usb_info *ui)
 
 	if (temp == USB_CHG_TYPE__WALLCHARGER)
 		return USB_WALLCHARGER_CHG_CURRENT;
+
+#ifdef CONFIG_SKY_CHARGING
+	factory_check = pm8058_is_factory_cable();
+	if (factory_check)
+		return 1500;
+
+	if(suspended && (temp == USB_CHG_TYPE__SDP))
+		return 600;
+
+	if((ui->usb_state == USB_STATE_ADDRESS) && (temp == USB_CHG_TYPE__SDP))
+		return 500;
+#endif
 
 	if (suspended || !configured)
 		return 0;
@@ -427,6 +449,10 @@ static void usb_chg_detect(struct work_struct *w)
 
 	temp = usb_get_chg_type(ui);
 	spin_unlock_irqrestore(&ui->lock, flags);
+
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(&ui->pdev->dev, "[SKY CHG]usb_chg_detect %d, chg_type %d\n", ui->usb_state, temp);
+#endif
 
 	atomic_set(&otg->chg_type, temp);
 	maxpower = usb_get_max_power(ui);
@@ -2472,7 +2498,11 @@ static ssize_t show_usb_chg_type(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
+#if defined(CONFIG_ANDROID_PANTECH_USB)
+static DEVICE_ATTR(usb_state, S_IRUSR | S_IRGRP | S_IROTH, show_usb_state, 0);
+#else
 static DEVICE_ATTR(usb_state, S_IRUSR, show_usb_state, 0);
+#endif
 static DEVICE_ATTR(usb_speed, S_IRUSR, show_usb_speed, 0);
 static DEVICE_ATTR(chg_type, S_IRUSR, show_usb_chg_type, 0);
 static DEVICE_ATTR(chg_current, S_IWUSR | S_IRUSR,

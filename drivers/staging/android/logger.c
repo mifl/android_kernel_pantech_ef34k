@@ -29,6 +29,18 @@
 
 #include <asm/ioctls.h>
 
+#include "logger.h"
+
+#if defined(CONFIG_EF33_BOARD) || defined(CONFIG_EF34_BOARD) || defined(CONFIG_EF35_BOARD)
+// by jwcha090923
+// If you don't want android log on UART, comment below definition
+#define ANDROID_UART_LOG
+#endif
+
+#ifdef  ANDROID_UART_LOG
+static int logger_android_uart_enabled = 0; 
+#endif  // ANDROID_UART_LOG
+
 /*
  * struct logger_log - represents a specific log, such as 'main' or 'radio'
  *
@@ -61,6 +73,17 @@ struct logger_reader {
 
 /* logger_offset - returns index 'n' into the log via (optimized) modulus */
 #define logger_offset(n)	((n) & (log->size - 1))
+
+#ifdef  ANDROID_UART_LOG
+void logger_set_android_uart_log(int flag)
+{
+  if (logger_android_uart_enabled != flag) {
+    logger_android_uart_enabled = flag;
+    printk(KERN_ERR "%s : android UART log status (%d)\n", __func__, flag);
+  }
+}
+EXPORT_SYMBOL(logger_set_android_uart_log);
+#endif  // ANDROID_UART_LOG
 
 /*
  * file_get_log - Given a file structure, return the associated log
@@ -333,6 +356,9 @@ ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	now = current_kernel_time();
 
 	header.pid = current->tgid;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+    header.__pad = 0x14;
+#endif
 	header.tid = current->pid;
 	header.sec = now.tv_sec;
 	header.nsec = now.tv_nsec;
@@ -572,6 +598,53 @@ static struct logger_log *get_log_from_minor(int minor)
 		return &log_system;
 	return NULL;
 }
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+struct logger_log *cur_log;
+void logcat_set_log(int index)
+{
+	switch(index){
+		case 1:
+			cur_log = &log_main;
+			break;
+		case 2:
+			cur_log = &log_events;
+			break;
+		case 3:
+			cur_log = &log_radio;
+			break;
+		case 4:
+			cur_log = &log_system;
+			break;
+		default:
+			cur_log = &log_system;
+			break;
+	}
+}
+
+int logcat_buf_copy(char *dest, int len)
+{
+    struct logger_log   *log;
+    int                 size;
+    int                 head;
+    int                 w_off;
+    int                 real_size;
+    int                 ret;
+    int                 i;
+
+    log         = cur_log;
+    size        = (int)(log->size);
+    head        = (int)(log->head);
+    w_off       = (int)(log->w_off) + size;
+    real_size   = logger_offset(w_off - head);
+    ret         = min(real_size, len);
+    for(i = ret; i > 0; i--)
+    {
+        dest[i] = log->buffer[logger_offset(head + i - 1)];
+    }
+	return ret;
+}
+#endif
 
 static int __init init_log(struct logger_log *log)
 {

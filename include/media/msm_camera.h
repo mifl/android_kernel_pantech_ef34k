@@ -587,6 +587,9 @@ struct msm_frame {
 
 	struct ion_allocation_data ion_alloc;
 	struct ion_fd_data fd_data;
+#ifdef F_PANTECH_CAMERA_FD//IRQ
+	uint32_t irq_stat;
+#endif	
 };
 
 enum msm_st_frame_packing {
@@ -697,7 +700,6 @@ struct msm_stats_buf {
 /* camera operation mode for jpeg snapshot - one frame output queue */
 #define MSM_V4L2_CAM_OP_JPEG_CAPTURE    (MSM_V4L2_CAM_OP_DEFAULT+6)
 
-
 #define MSM_V4L2_VID_CAP_TYPE	0
 #define MSM_V4L2_STREAM_ON		1
 #define MSM_V4L2_STREAM_OFF		2
@@ -767,7 +769,50 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_EEPROM_DATA		33
 #define CFG_SET_ACTUATOR_INFO		34
 #define CFG_GET_ACTUATOR_INFO		35
+#ifdef F_SKYCAM_CUST_MSM_CAMERA_CFG
+#ifdef F_SKYCAM_FIX_CFG_AF
+#define CFG_AUTO_FOCUS 36
+#endif
+#ifdef F_SKYCAM_FIX_CFG_ISO
+#define CFG_SET_ISO 37
+#endif
+#ifdef F_SKYCAM_FIX_CFG_SCENE_MODE
+#define CFG_SET_SCENE_MODE 38
+#endif
+#ifdef F_SKYCAM_FIX_CFG_FOCUS_STEP
+#define CFG_SET_FOCUS_STEP 39
+#endif
+#ifdef F_SKYCAM_ADD_CFG_SZOOM
+#define CFG_SET_SZOOM 40
+#endif
+#ifdef F_SKYCAM_ADD_CFG_ANTISHAKE
+#define CFG_SET_ANTISHAKE 41
+#endif
+#ifdef F_SKYCAM_FIX_CFG_FOCUS_RECT
+#define CFG_SET_FOCUS_RECT		42
+#endif
+#ifdef F_SKYCAM_FIX_CFG_LED_MODE
+#define CFG_SET_LED_MODE 43
+#endif
+#ifdef F_SKYCAM_ADD_CFG_DIMENSION
+#define CFG_SET_DIMENSION 44
+#endif
+#ifdef F_SKYCAM_TUP_LOAD_FILE
+#define CFG_SET_TUNE_VALUE 45
+#endif
+#ifdef F_SKYCAM_FIX_CFG_REFLECT
+#define CFG_SET_REFLECT 46
+#endif
+#ifdef F_SKYCAM_FIX_CFG_PREVIEW_FPS
+#define CFG_SET_PREVIEW_FPS 47
+#endif
+#ifdef F_SKYCAM_FIX_CFG_CAF
+#define CFG_SET_CAF 48
+#endif
+#define CFG_MAX			49
+#else
 #define CFG_MAX			36
+#endif
 
 
 #define MOVE_NEAR	0
@@ -1069,6 +1114,26 @@ struct cord {
 	uint32_t y;
 };
 
+#ifdef F_SKYCAM_ADD_CFG_DIMENSION
+struct dimension_cfg {
+ uint16_t prev_dx; /* preview */
+ uint16_t prev_dy;
+ uint16_t pict_dx; /* snapshot */
+ uint16_t pict_dy;
+#ifdef F_SKYCAM_1080P_PREVIEW
+ uint16_t video_dx; /* camcorder */
+ uint16_t video_dy;
+#endif
+};
+#endif
+
+#ifdef F_SKYCAM_SENSOR_TUNEUP
+struct tune_value_cfg {
+ uint8_t* pfile_stream;
+ uint32_t file_size;
+};
+#endif
+
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
@@ -1077,6 +1142,59 @@ struct sensor_cfg_data {
 
 	union {
 		int8_t effect;
+
+///////////////////////////////////////////////////////////		
+		//2010202 jjhwang add prameter
+#ifdef F_SKYCAM_FIX_CFG_WB		
+		int8_t whitebalance;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_BRIGHTNESS
+// skkim7 temp 		int8_t brightness;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_LED_MODE
+ 		int32_t led_mode;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_ISO
+		 int8_t iso;		
+#endif
+#ifdef F_SKYCAM_FIX_CFG_SCENE_MODE
+ 		int32_t scene_mode; 
+#endif
+#ifdef F_SKYCAM_FIX_CFG_FOCUS_STEP
+ 		int32_t focus_step;
+#endif
+#ifdef F_SKYCAM_ISP_ZOOM
+		int32_t isp_zoom_step;
+#endif
+#ifdef F_SKYCAM_ADD_CFG_ANTISHAKE
+		 int32_t antishake;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_EXPOSURE
+		int32_t exposure;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_FOCUS_RECT
+		uint32_t focus_rect; /* xright, xleft, ytop, ybottom */
+#endif
+#ifdef F_SKYCAM_ADD_CFG_DIMENSION
+ 		struct dimension_cfg dimension;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_ANTIBANDING
+// skkim7 temp		int32_t antibanding;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_PREVIEW_FPS
+		int32_t preview_fps;
+#endif
+#ifdef F_SKYCAM_TUP_LOAD_FILE
+	struct tune_value_cfg tune_value;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_REFLECT
+	int32_t reflect;
+#endif
+#ifdef F_SKYCAM_FIX_CFG_CAF
+	int32_t caf;
+#endif
+///////////////////////////////////////////////////////////
+		
 		uint8_t lens_shading;
 		uint16_t prevl_pf;
 		uint16_t prevp_pl;

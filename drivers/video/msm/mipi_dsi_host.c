@@ -1123,6 +1123,7 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 		 * even it is video mode panel.
 		 */
 		/* make sure mdp dma is not txing pixel data */
+#ifndef CONFIG_FB_MSM_MIPI_DSI_MAGNA
 		if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 #ifndef CONFIG_FB_MSM_MDP303
 			mdp4_dsi_cmd_dma_busy_wait(mfd);
@@ -1130,6 +1131,7 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 			mdp3_dsi_cmd_dma_busy_wait(mfd);
 #endif
 		}
+#endif
 	}
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
@@ -1303,6 +1305,10 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 	return rp->len;
 }
 
+#if 1	//[BIH] workaround LCD not wake-up problem
+int mipi_dsi_cmd_dma_tx_timeout_cnt=0;
+extern int mipi_magna_lcd_off_running;
+#endif
 int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 {
 	int len;
@@ -1336,6 +1342,18 @@ int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 	MIPI_OUTP(MIPI_DSI_BASE + 0x08c, 0x01);	/* trigger */
 	wmb();
 
+#if 1	//[BIH] workaround LCD not wake-up problem
+	if(mipi_magna_lcd_off_running)
+	{
+		unsigned long time_out;
+		time_out = wait_for_completion_timeout(&dsi_dma_comp,2*HZ);
+		if(time_out==0){
+			mipi_dsi_cmd_dma_tx_timeout_cnt++;
+			printk("%s wait_for_completion_timeout Expired\n",__func__);
+		}
+	}
+	else
+#endif
 	wait_for_completion(&dsi_dma_comp);
 
 	dma_unmap_single(&dsi_dev, tp->dmap, len, DMA_TO_DEVICE);

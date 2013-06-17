@@ -490,6 +490,9 @@ frmnet_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	atomic_set(&dev->online, 1);
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	usb_interface_enum_cb(RMNET_TYPE_FLAG);
+#endif
 	return ret;
 }
 
@@ -785,6 +788,18 @@ static int frmnet_bind(struct usb_configuration *c, struct usb_function *f)
 	struct usb_ep			*ep;
 	struct usb_composite_dev	*cdev = c->cdev;
 	int				ret = -ENODEV;
+
+#ifdef CONFIG_ANDROID_PANTECH_USB
+	if(!b_qualcomm_usb_mode && b_pantech_usb_module){
+		rmnet_interface_desc.bInterfaceClass =      USB_CLASS_VENDOR_SPEC;
+		rmnet_interface_desc.bInterfaceSubClass =   0xF0;
+		rmnet_interface_desc.bInterfaceProtocol =   0x00;
+	}else{
+		rmnet_interface_desc.bInterfaceClass =      USB_CLASS_VENDOR_SPEC;
+		rmnet_interface_desc.bInterfaceSubClass =   USB_CLASS_VENDOR_SPEC;
+		rmnet_interface_desc.bInterfaceProtocol =   USB_CLASS_VENDOR_SPEC;
+	}
+#endif
 
 	dev->ifc_id = usb_interface_id(c, f);
 	if (dev->ifc_id < 0) {

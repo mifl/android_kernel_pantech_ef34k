@@ -27,6 +27,10 @@
 
 #include <asm/mach-types.h>
 
+#if 1//p14291_111214
+#include <linux/console.h> //p14291_111214
+#endif /*  */
+
 #include <mach/msm_iomap.h>
 #include <mach/restart.h>
 #include <mach/socinfo.h>
@@ -34,6 +38,16 @@
 #include <mach/scm.h>
 #include "msm_watchdog.h"
 #include "timer.h"
+
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+#include "sky_sys_reset.h"
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
+
+#define PZ1759_SW1_PLM554_ShutdownBluescreenFix		//[BIH] PLM554 shutdown bluescreen fix.
+
+#ifdef  PZ1759_SW1_PLM554_ShutdownBluescreenFix		//[BIH] PLM554 shutdown bluescreen fix.
+#include <mach/gpio.h>
+#endif /* PZ1759_SW1_PLM554_ShutdownBluescreenFix */
 
 #define WDT0_RST	0x38
 #define WDT0_EN		0x40
@@ -43,15 +57,31 @@
 #define PSHOLD_CTL_SU (MSM_TLMM_BASE + 0x820)
 
 #define RESTART_REASON_ADDR 0x65C
+
 #define DLOAD_MODE_ADDR     0x0
 
 #define SCM_IO_DISABLE_PMIC_ARBITER	1
+
+#ifdef PZ1759_SW1_PLM554_ShutdownBluescreenFix		//[BIH] PLM554 shutdown bluescreen fix.
+#define GPIO_HIGH_VALUE 1
+#define GPIO_LOW_VALUE  0
+#define LCD_BL_EN      140
+#endif /* PZ1759_SW1_PLM554_ShutdownBluescreenFix */
+
 
 static int restart_mode;
 void *restart_reason;
 
 int pmic_reset_irq;
 static void __iomem *msm_tmr0_base;
+
+#ifdef FEATURE_SKY_SDCARD_UPGRADE
+#define SDCARD_REBOOT_OK		0xCECEECEC
+#endif /* FEATURE_SKY_SDCARD_UPGRADE */
+
+#ifdef CONFIG_SKY_CHARGING
+#define NORMAL_RESET_MAGIC_NUM 0xbaabcddc
+#endif /* CONFIG_SKY_CHARGING */
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 static int in_panic;
@@ -99,7 +129,6 @@ static int dload_set(const char *val, struct kernel_param *kp)
 		download_mode = old_val;
 		return -EINVAL;
 	}
-
 	set_dload_mode(download_mode);
 
 	return 0;
@@ -116,10 +145,29 @@ EXPORT_SYMBOL(msm_set_restart_mode);
 
 static void __msm_power_off(int lower_pshold)
 {
+#ifdef CONFIG_SKY_CHARGING
+	void *restart_reason;
+
+	restart_reason = ioremap_nocache(PANTECH_RESTART_REASON_ADDR, SZ_4K);
+    	writel(0x00, restart_reason);
+    	writel(0x00, restart_reason+4);
+        iounmap(restart_reason);
+#endif /* CONFIG_SKY_CHARGING */
 	printk(KERN_CRIT "Powering off the SoC\n");
 #ifdef CONFIG_MSM_DLOAD_MODE
 	set_dload_mode(0);
 #endif
+
+#ifdef PZ1759_SW1_PLM554_ShutdownBluescreenFix		//[BIH] PLM554 shutdown bluescreen fix.
+	gpio_set_value(LCD_BL_EN ,GPIO_LOW_VALUE);
+	mdelay(1);      // Disable hold time
+	printk(KERN_ERR "wait 1msec... to off LCD BL completely\n");
+#endif /* PZ1759_SW1_PLM554_ShutdownBluescreenFix */
+
+#if 1	//Power Off Sync
+	mdelay(10);
+#endif /*  */
+
 	pm8xxx_reset_pwr_off(0);
 
 	if (lower_pshold) {
@@ -177,11 +225,13 @@ static irqreturn_t resout_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+int sky_reset_reason=SYS_RESET_REASON_UNKNOWN;
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
+
 void arch_reset(char mode, const char *cmd)
 {
-
 #ifdef CONFIG_MSM_DLOAD_MODE
-
 	/* This looks like a normal reboot at this point. */
 	set_dload_mode(0);
 
@@ -200,28 +250,73 @@ void arch_reset(char mode, const char *cmd)
 	printk(KERN_NOTICE "Going down for restart now\n");
 
 	pm8xxx_reset_pwr_off(1);
+	printk(KERN_NOTICE "arch_reset start allydrop   in_panic:%x ,cmd '%s'\n",in_panic,cmd);
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			__raw_writel(0x77665500, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
 			__raw_writel(0x77665502, restart_reason);
+#ifdef FEATURE_SKY_SDCARD_UPGRADE
+		} else if (!strncmp(cmd, "sdcard", 5)) {
+			printk(KERN_NOTICE "allydrop arch_reset:%x\n",mode);
+			__raw_writel(SDCARD_REBOOT_OK, restart_reason);
+#endif	
+#ifdef CONFIG_SW_RESET
+		} else if (!strncmp(cmd, "androidpanic", 12)) {
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+			printk(KERN_NOTICE "allydrop android panic!!!!in_panic:%x\n",in_panic);
+			sky_reset_reason=SYS_RESET_REASON_ANDROID;
+#endif		
+			panic("android framework error\n"); 
+#endif /* CONFIG_SW_RESET */
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			code = simple_strtoul(cmd + 4, NULL, 16) & 0xff;
 			__raw_writel(0x6f656d00 | code, restart_reason);
+		//[BIH] fix reboot.rle output when encrypting error...	
+		}else if(!strncmp(cmd, "crypt", 3)){						//[BIH]++ 
+			printk(KERN_NOTICE "allydrop arch_reset:%x\n",mode);	//[BIH]++ 
+			sky_reset_reason=SYS_RESET_REASON_NORMAL;				//[BIH]++
+			__raw_writel(sky_reset_reason, restart_reason);			//[BIH]++
 		} else {
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+			if(in_panic){//sky_reset_reason
+				__raw_writel(sky_reset_reason, restart_reason);
+			}
+			else
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
 			__raw_writel(0x77665501, restart_reason);
 		}
+#ifdef CONFIG_SKY_CHARGING
+		__raw_writel(NORMAL_RESET_MAGIC_NUM, restart_reason+4);
+#endif /* CONFIG_SKY_CHARGING */
 	}
+#ifdef MODEL_SKY
+	else //20110521 reboot err temp
+	{
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+		if(in_panic){//sky_reset_reason
+			__raw_writel(sky_reset_reason, restart_reason);
+		}
+		else
+#endif
+		__raw_writel(0x77665501, restart_reason);
+#ifdef CONFIG_SKY_CHARGING
+		__raw_writel(NORMAL_RESET_MAGIC_NUM, restart_reason+4);
+#endif
+	}
+#endif /* MODEL_SKY */
 
 	__raw_writel(0, msm_tmr0_base + WDT0_EN);
+	#if 0 //p14291
 	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())) {
 		mb();
 		__raw_writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
 		mdelay(5000);
 		pr_notice("PS_HOLD didn't work, falling back to watchdog\n");
 	}
+	#endif
 
 	__raw_writel(1, msm_tmr0_base + WDT0_RST);
 	__raw_writel(5*0x31F3, msm_tmr0_base + WDT0_BARK_TIME);
@@ -235,6 +330,9 @@ void arch_reset(char mode, const char *cmd)
 static int __init msm_restart_init(void)
 {
 	int rc;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	void *phy_log_buf;
+#endif
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
@@ -246,6 +344,11 @@ static int __init msm_restart_init(void)
 	msm_tmr0_base = msm_timer_get_timer0_base();
 	restart_reason = MSM_IMEM_BASE + RESTART_REASON_ADDR;
 	pm_power_off = msm_power_off;
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	phy_log_buf = (void*)virt_to_phys((void*)get_log_buf_addr());
+	writel(phy_log_buf, restart_reason+0xc); //0x0,0x4:magic1,2 0x8:using at msm_fb
+#endif
 
 	if (pmic_reset_irq != 0) {
 		rc = request_any_context_irq(pmic_reset_irq,

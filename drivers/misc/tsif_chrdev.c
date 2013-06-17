@@ -42,9 +42,25 @@ struct tsif_chrdev {
 	unsigned rptr;
 };
 
+
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+extern void tdmb_tsif_data_parser(char* user_buf, void * data_buffer, int size);
+
+struct tsif_chrdev *tsif_dev_tdmb;
+
+//#define FEATURE_TSIF_DEBUG_MSG
+
+//extern int g_packet_read_cnt;
+#endif
+
 static ssize_t tsif_open(struct inode *inode, struct file *file)
 {
 	int rc;
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] !!!!!!!\n", __func__);
+#endif
+
 	struct tsif_chrdev *the_dev =
 	       container_of(inode->i_cdev, struct tsif_chrdev, cdev);
 	if (!the_dev->cookie)  /* not bound yet */
@@ -59,8 +75,53 @@ static ssize_t tsif_open(struct inode *inode, struct file *file)
 	return nonseekable_open(inode, file);
 }
 
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+void tsif_test_tdmb(void)
+{
+	int rc;
+	//struct file *file;
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] !!!!!!!\n", __func__);
+
+	pr_info("[%s] tsif_dev_tdmb[0x%8x]\n", __func__, &tsif_dev_tdmb);
+#endif
+  
+	struct tsif_chrdev *the_dev = tsif_dev_tdmb;
+
+	if (!the_dev->cookie)  /* not bound yet */
+		return;
+
+	//file->private_data = the_dev;
+
+	rc = tsif_start(the_dev->cookie);
+	if (rc)
+		return;
+	tsif_get_info(the_dev->cookie, &the_dev->data_buffer,
+		      &the_dev->buf_size_packets);
+	the_dev->rptr = 0;
+	//return nonseekable_open(inode, file);
+}
+
+EXPORT_SYMBOL(tsif_test_tdmb);
+
+void tsif_force_stop(void)
+{
+  struct tsif_chrdev *the_dev = tsif_dev_tdmb;
+  if(the_dev->state != tsif_state_stopped)
+  {
+    tsif_stop(the_dev->cookie);
+  }
+}
+EXPORT_SYMBOL(tsif_force_stop);
+#endif
+
 static ssize_t tsif_release(struct inode *inode, struct file *filp)
 {
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] !!!!!!!\n", __func__);
+#endif
+
 	struct tsif_chrdev *the_dev = filp->private_data;
 	tsif_stop(the_dev->cookie);
 	return 0;
@@ -71,6 +132,12 @@ static ssize_t tsif_read(struct file *filp, char __user *buf, size_t count,
 {
 	int avail = 0;
 	int wi;
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] !!!!!!!\n", __func__);
+	//g_packet_read_cnt ++;
+#endif
+  
 	struct tsif_chrdev *the_dev = filp->private_data;
 	tsif_get_state(the_dev->cookie, &the_dev->ri, &the_dev->wi,
 		       &the_dev->state);
@@ -92,12 +159,21 @@ static ssize_t tsif_read(struct file *filp, char __user *buf, size_t count,
 				return 0;
 			}
 		}
+#if 0
 		if (wait_event_interruptible(the_dev->wq_read,
 		      (the_dev->ri != the_dev->wi) ||
 		      (the_dev->state != tsif_state_running))) {
 			/* got signal -> tell FS to handle it */
 			return -ERESTARTSYS;
 		}
+#else
+        if (wait_event_interruptible_timeout(the_dev->wq_read,
+              ((the_dev->ri != the_dev->wi) ||
+              (the_dev->state != tsif_state_running)),msecs_to_jiffies(50))) {
+          /* got signal -> tell FS to handle it */
+          return -ERESTARTSYS;
+        }
+#endif
 		if (the_dev->ri == the_dev->wi) {
 			/* still no data -> EOF */
 			return 0;
@@ -107,8 +183,18 @@ static ssize_t tsif_read(struct file *filp, char __user *buf, size_t count,
 	wi = (the_dev->wi > the_dev->ri) ?
 		the_dev->wi : the_dev->buf_size_packets;
 	avail = min(wi * TSIF_PKT_SIZE - the_dev->rptr, count);
-	if (copy_to_user(buf, the_dev->data_buffer + the_dev->rptr, avail))
-		return -EFAULT;
+
+#ifdef FEATURE_TSIF_DEBUG_MSG
+	pr_info("[%s] size [%d] !!!!!!!\n", __func__, avail);
+#endif
+  
+	//if (copy_to_user(buf, the_dev->data_buffer + the_dev->rptr, avail))
+	//	return -EFAULT;
+
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+	tdmb_tsif_data_parser(buf, the_dev->data_buffer + the_dev->rptr, avail);
+#endif
+  
 	the_dev->rptr = (the_dev->rptr + avail) %
 		(TSIF_PKT_SIZE * the_dev->buf_size_packets);
 	the_dev->ri = the_dev->rptr / TSIF_PKT_SIZE;
@@ -152,6 +238,11 @@ static int tsif_init_one(struct tsif_chrdev *the_dev, int index)
 		goto err_create;
 	}
 	the_dev->cookie = tsif_attach(index, tsif_notify, the_dev);
+
+#ifdef CONFIG_SKY_TDMB_TSIF_IF
+	tsif_dev_tdmb = the_dev; // cys test
+#endif
+
 	if (IS_ERR(the_dev->cookie)) {
 		rc = PTR_ERR(the_dev->cookie);
 		pr_err("tsif_attach failed: %d\n", rc);

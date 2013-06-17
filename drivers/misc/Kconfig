@@ -650,4 +650,12 @@ source "drivers/misc/ti-st/Kconfig"
 source "drivers/misc/lis3lv02d/Kconfig"
 source "drivers/misc/carma/Kconfig"
 
+config NFC
+	bool "NFC Controller Driver"
+	depends on I2C && GENERIC_GPIO
+	default n
+	help
+	  Near Field Communication controller support.
+	  
+
 endif # MISC_DEVICES

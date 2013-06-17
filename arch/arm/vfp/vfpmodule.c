@@ -403,6 +403,10 @@ static void vfp_enable(void *unused)
 	set_copro_access(access | CPACC_FULL(10) | CPACC_FULL(11));
 }
 
+#ifdef MODEL_SKY
+static int is_vfpinit = 0;
+#endif /* MODEL_SKY */
+
 int vfp_flush_context(void)
 {
 	unsigned long flags;
@@ -410,6 +414,10 @@ int vfp_flush_context(void)
 	u32 fpexc;
 	u32 cpu;
 	int saved = 0;
+
+#ifdef MODEL_SKY
+        if( is_vfpinit == 0) return saved;
+#endif /* MODEL_SKY */
 
 	local_irq_save(flags);
 
@@ -635,6 +643,11 @@ static int __init vfp_init(void)
 				elf_hwcap |= HWCAP_VFPv4;
 		}
 	}
+
+#ifdef MODEL_SKY
+	is_vfpinit = 1;
+#endif /* MODEL_SKY */
+
 	return 0;
 }
 

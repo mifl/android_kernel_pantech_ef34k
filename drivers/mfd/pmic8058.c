@@ -20,6 +20,9 @@
 #include <linux/irq.h>
 #include <linux/msm_ssbi.h>
 #include <linux/mfd/core.h>
+#ifdef CONFIG_SKY_CHARGING
+#include <mach/board-msm8660.h>
+#endif
 #include <linux/mfd/pmic8058.h>
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/msm_adc.h>
@@ -109,7 +112,7 @@ static int pm8058_write_buf(const struct device *dev, u16 addr, u8 *buf,
 	return msm_ssbi_write(pmic->dev->parent, addr, buf, cnt);
 }
 
-static int pm8058_read_irq_stat(const struct device *dev, int irq)
+/*static*/ int pm8058_read_irq_stat(const struct device *dev, int irq)
 {
 	const struct pm8xxx_drvdata *pm8058_drvdata = dev_get_drvdata(dev);
 	const struct pm8058_chip *pmic = pm8058_drvdata->pm_chip_data;
@@ -171,6 +174,9 @@ static const struct resource pm8058_charger_resources[] __devinitconst = {
 	SINGLE_IRQ_RESOURCE("BATT_REPLACE",	PM8058_BATT_REPLACE_IRQ),
 	SINGLE_IRQ_RESOURCE("BATTCONNECT",	PM8058_BATTCONNECT_IRQ),
 	SINGLE_IRQ_RESOURCE("VBATDET_LOW",	PM8058_VBATDET_LOW_IRQ),
+#ifdef CONFIG_SKY_CHARGING	
+	SINGLE_IRQ_RESOURCE("BATT_ID_CHANGED",	PM8058_BATT_ID_IRQ),
+#endif
 };
 
 static struct mfd_cell pm8058_charger_cell __devinitdata = {

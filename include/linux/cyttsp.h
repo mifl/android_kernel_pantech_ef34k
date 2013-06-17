@@ -36,13 +36,18 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 
-#include <asm/mach-types.h>
+#define CYPRESS_TTSP_NAME		"cyttsp"
+#define CYTTSP_I2C_NAME		"cyttsp-i2c"
+#define CYTTSP_SPI_NAME		"cyttsp-spi"
+#define TOUCH_DELTA_LIMIT	2             
 
-#define CYPRESS_TTSP_NAME	"cyttsp"
-#define CY_I2C_NAME		"cyttsp-i2c"
-#define CY_SPI_NAME		"cyttsp-spi"
 
-#ifdef CY_DECLARE_GLOBALS
+#define FEATURE_SKY_TOUCH_FOR_SLEEP
+#define FEATURE_SKY_TOUCH_DELTA_DEBUG
+
+#define FEATURE_SKY_NONBLACK_FIRMWARE
+
+#ifdef CYTTSP_DECLARE_GLOBALS
 	uint32_t cyttsp_tsdebug;
 	module_param_named(tsdebug, cyttsp_tsdebug, uint, 0664);
 	uint32_t cyttsp_tsxdebug;
@@ -65,166 +70,138 @@
 /* defines for Gen2 (Txx2xx); Gen3 (Txx3xx)
  * use these defines to set cyttsp_platform_data.gen in board config file
  */
-#define CY_GEN2		2
-#define CY_GEN3		3
-
-/* define for using I2C driver
- */
-#define CY_USE_I2C_DRIVER
-
-/* defines for using SPI driver */
-/*
-#define CY_USE_SPI_DRIVER
- */
-#define CY_SPI_DFLT_SPEED_HZ		1000000
-#define CY_SPI_MAX_SPEED_HZ		4000000
-#define CY_SPI_SPEED_HZ			CY_SPI_DFLT_SPEED_HZ
-#define CY_SPI_BITS_PER_WORD		8
-#define CY_SPI_DAV			139	/* set correct gpio id */
-#define CY_SPI_BUFSIZE			512
-
-/* Voltage and Current ratings */
-#define CY_TMA300_VTG_MAX_UV		5500000
-#define CY_TMA300_VTG_MIN_UV		1710000
-#define CY_TMA300_CURR_24HZ_UA		17500
-#define CY_TMA300_SLEEP_CURR_UA		10
-#define CY_I2C_VTG_MAX_UV		1800000
-#define CY_I2C_VTG_MIN_UV		1800000
-#define CY_I2C_CURR_UA			9630
-#define CY_I2C_SLEEP_CURR_UA		10
-
+#define CYTTSP_GEN2		2
+#define CYTTSP_GEN3		3
 
 /* define for inclusion of TTSP App Update Load File
  * use this define if update to the TTSP Device is desired
  */
 /*
-#define CY_INCLUDE_LOAD_FILE
+#define CYTTSP_INCLUDE_LOAD_FILE
 */
 
 /* define if force new load file for bootloader load */
 /*
-#define CY_FORCE_FW_UPDATE
+#define CYTTSP_FORCE_FW_UPDATE
 */
 
 /* undef for production use */
 /*
-#define CY_USE_DEBUG
-*/
+ */
+//#define CYTTSP_USE_DEBUG
 
 /* undef for irq use; use this define in the board configuration file */
 /*
-#define CY_USE_TIMER
+#define CYTTSP_USE_TIMER
  */
 
 /* undef to allow use of extra debug capability */
-/*
-#define CY_ALLOW_EXTRA_DEBUG
-*/
+//#define CYTTSP_ALLOW_EXTRA_DEBUG
+
 
 /* undef to remove additional debug prints */
-/*
-#define CY_USE_EXTRA_DEBUG
-*/
+//#define CYTTSP_USE_EXTRA_DEBUG
 
 /* undef to remove additional debug prints */
-/*
-#define CY_USE_EXTRA_DEBUG1
- */
+//#define CYTTSP_USE_EXTRA_DEBUG1
+
 
 /* undef to use operational touch timer jiffies; else use test jiffies */
-/*
- */
-#define CY_USE_TIMER_DEBUG
+//#define CYTTSP_USE_TIMER_DEBUG
 
 /* define to use canned test data */
 /*
-#define CY_USE_TEST_DATA
+#define CYTTSP_USE_TEST_DATA
+ */
+
+/* define to activate power management */
+/*
+#define CYTTSP_USE_LOW_POWER
+ */
+
+/* define if wake on i2c addr is activated */
+/*
+#define CYTTSP_USE_DEEP_SLEEP
  */
 
 /* define if gesture signaling is used
  * and which gesture groups to use
  */
 /*
-#define CY_USE_GEST
-#define CY_USE_GEST_GRP1
-#define CY_USE_GEST_GRP2
-#define CY_USE_GEST_GRP3
-#define CY_USE_GEST_GRP4
+#define CYTTSP_USE_GEST
+#define CYTTSP_USE_GEST_GRP1
+#define CYTTSP_USE_GEST_GRP2
+#define CYTTSP_USE_GEST_GRP3
+#define CYTTSP_USE_GEST_GRP4
  */
 /* Active distance in pixels for a gesture to be reported
  * if set to 0, then all gesture movements are reported
  */
-#define CY_ACT_DIST_DFLT	8
-#define CY_ACT_DIST			CY_ACT_DIST_DFLT
+#define CYTTSP_ACT_DIST_DFLT	8
+#define CYTTSP_ACT_DIST			CYTTSP_ACT_DIST_DFLT
 
 /* define if MT signals are desired */
 /*
 */
-#define CY_USE_MT_SIGNALS
-
-/* define if MT tracking id signals are used */
-/*
-#define CY_USE_MT_TRACK_ID
- */
+#define CYTTSP_USE_MT_SIGNALS
 
 /* define if ST signals are required */
 /*
 */
-#define CY_USE_ST_SIGNALS
+#define CYTTSP_USE_ST_SIGNALS
 
-/* define to send handshake to device */
-/*
-*/
-#define CY_USE_HNDSHK
 
 /* define if log all raw motion signals to a sysfs file */
 /*
-#define CY_LOG_TO_FILE
 */
+#define CYTTSP_LOG_TO_FILE
 
 
 /* End of the Global Control section
  ******************************************************************************
  */
-#define CY_DIFF(m, n)		((m) != (n))
+#define FEATURE_CYTTSP_FIRMWAREUPGRADE // Firmware Upgrade
+#define FEATURE_CYTTSP_HEARTBEAT //Cypress HeartBeat
 
-#ifdef CY_LOG_TO_FILE
+#define CYTTSP_DIFF(m, n)		((m) != (n))
+
+#ifdef CYTTSP_LOG_TO_FILE
 	#define cyttsp_openlog()	/* use sysfs */
 #else
 	#define cyttsp_openlog()
-#endif /* CY_LOG_TO_FILE */
+#endif /* CYTTSP_LOG_TO_FILE */
 
 /* see kernel.h for pr_xxx def'ns */
 #define cyttsp_info(f, a...)		pr_info("%s:" f,  __func__ , ## a)
 #define cyttsp_error(f, a...)		pr_err("%s:" f,  __func__ , ## a)
 #define cyttsp_alert(f, a...)		pr_alert("%s:" f,  __func__ , ## a)
 
-#ifdef CY_USE_DEBUG
+#ifdef CYTTSP_USE_DEBUG
 	#define cyttsp_debug(f, a...)	pr_alert("%s:" f,  __func__ , ## a)
 #else
 	#define cyttsp_debug(f, a...)	{if (cyttsp_tsdebug) \
 					pr_alert("%s:" f,  __func__ , ## a); }
-#endif /* CY_USE_DEBUG */
+#endif /* CYTTSP_USE_DEBUG */
 
-#ifdef CY_ALLOW_EXTRA_DEBUG
-#ifdef CY_USE_EXTRA_DEBUG
+#ifdef CYTTSP_ALLOW_EXTRA_DEBUG
+#ifdef CYTTSP_USE_EXTRA_DEBUG
 	#define cyttsp_xdebug(f, a...)	pr_alert("%s:" f,  __func__ , ## a)
 #else
 	#define cyttsp_xdebug(f, a...)	{if (cyttsp_tsxdebug) \
 					pr_alert("%s:" f,  __func__ , ## a); }
-#endif /* CY_USE_EXTRA_DEBUG */
+#endif /* CYTTSP_USE_EXTRA_DEBUG */
 
-#ifdef CY_USE_EXTRA_DEBUG1
+#ifdef CYTTSP_USE_EXTRA_DEBUG1
 	#define cyttsp_xdebug1(f, a...)	pr_alert("%s:" f,  __func__ , ## a)
 #else
 	#define cyttsp_xdebug1(f, a...)
-#endif /* CY_USE_EXTRA_DEBUG1 */
+#endif /* CYTTSP_USE_EXTRA_DEBUG1 */
 #else
 	#define cyttsp_xdebug(f, a...)
 	#define cyttsp_xdebug1(f, a...)
-#endif /* CY_ALLOW_EXTRA_DEBUG */
+#endif /* CYTTSP_ALLOW_EXTRA_DEBUG */
 
-#ifdef CY_USE_TIMER_DEBUG
+#ifdef CYTTSP_USE_TIMER_DEBUG
 	#define	TOUCHSCREEN_TIMEOUT	(msecs_to_jiffies(1000))
 #else
 	#define	TOUCHSCREEN_TIMEOUT	(msecs_to_jiffies(28))
@@ -233,23 +210,23 @@
 /* reduce extra signals in MT only build
  * be careful not to lose backward compatibility for pre-MT apps
  */
-#ifdef CY_USE_ST_SIGNALS
-	#define CY_USE_ST	1
+#ifdef CYTTSP_USE_ST_SIGNALS
+	#define CYTTSP_USE_ST	1
 #else
-	#define CY_USE_ST	0
-#endif /* CY_USE_ST_SIGNALS */
+	#define CYTTSP_USE_ST	0
+#endif /* CYTTSP_USE_ST_SIGNALS */
 
 /* rely on kernel input.h to define Multi-Touch capability */
 /* if input.h defines the Multi-Touch signals, then use MT */
-#if defined(ABS_MT_TOUCH_MAJOR) && defined(CY_USE_MT_SIGNALS)
-	#define CY_USE_MT	1
-	#define CY_MT_SYNC(input)	input_mt_sync(input)
+#if defined(ABS_MT_TOUCH_MAJOR) && defined(CYTTSP_USE_MT_SIGNALS)
+	#define CYTTSP_USE_MT	1
+	#define CYTTSP_MT_SYNC(input)	input_mt_sync(input)
 #else
-	#define CY_USE_MT	0
-	#define CY_MT_SYNC(input)
+	#define CYTTSP_USE_MT	0
+	#define CYTTSP_MT_SYNC(input)
 	/* the following includes are provided to ensure a compile;
 	 * the code that compiles with these defines will not be executed if
-	 * the CY_USE_MT is properly used in the platform structure init
+	 * the CYTTSP_USE_MT is properly used in the platform structure init
 	 */
 	#ifndef ABS_MT_TOUCH_MAJOR
 	#define ABS_MT_TOUCH_MAJOR	0x30	/* touching ellipse */
@@ -262,23 +239,29 @@
 	#define ABS_MT_TOOL_TYPE	0x37	/* Type of touching device */
 	#define ABS_MT_BLOB_ID		0x38	/* Group set of pkts as blob */
 	#endif /* ABS_MT_TOUCH_MAJOR */
-#endif /* ABS_MT_TOUCH_MAJOR and CY_USE_MT_SIGNALS */
-#if defined(ABS_MT_TRACKING_ID)  && defined(CY_USE_MT_TRACK_ID)
-	#define CY_USE_TRACKING_ID	1
+#endif /* ABS_MT_TOUCH_MAJOR and CYTTSP_USE_MT_SIGNALS */
+#ifdef ABS_MT_TRACKING_ID
+	#define CYTTSP_USE_TRACKING_ID	1
 #else
-	#define CY_USE_TRACKING_ID	0
+	#define CYTTSP_USE_TRACKING_ID	0
 /* define only if not defined already by system;
  * value based on linux kernel 2.6.30.10
  */
-#ifndef ABS_MT_TRACKING_ID
 	#define ABS_MT_TRACKING_ID	(ABS_MT_BLOB_ID+1)
-#endif
 #endif /* ABS_MT_TRACKING_ID */
 
-#define CY_USE_DEEP_SLEEP_SEL		0x80
-#define CY_USE_LOW_POWER_SEL		0x01
+#ifdef CYTTSP_USE_DEEP_SLEEP
+	#define CYTTSP_USE_DEEP_SLEEP_SEL	0x80
+#else
+	#define CYTTSP_USE_DEEP_SLEEP_SEL	0x00
+#endif
+#ifdef CYTTSP_USE_LOW_POWER
+	#define CYTTSP_USE_SLEEP	(CYTTSP_USE_DEEP_SLEEP_SEL | 0x01)
+#else
+	#define CYTTSP_USE_SLEEP	0x00
+#endif /* CYTTSP_USE_LOW_POWER */
 
-#ifdef CY_USE_TEST_DATA
+#ifdef CYTTSP_USE_TEST_DATA
 	#define cyttsp_testdat(ray1, ray2, sizeofray) \
 		{ \
 			int i; \
@@ -290,14 +273,15 @@
 		}
 #else
 	#define cyttsp_testdat(xy, test_xy, sizeofray)
-#endif /* CY_USE_TEST_DATA */
+#endif /* CYTTSP_USE_TEST_DATA */
 
 /* helper macros */
+
 #define GET_NUM_TOUCHES(x)		((x) & 0x0F)
-#define GET_TOUCH1_ID(x)		(((x) & 0xF0) >> 4)
-#define GET_TOUCH2_ID(x)		((x) & 0x0F)
-#define GET_TOUCH3_ID(x)		(((x) & 0xF0) >> 4)
-#define GET_TOUCH4_ID(x)		((x) & 0x0F)
+#define GET_TOUCH1_ID(x)		(((x) & 0xF0) >> 4) -1
+#define GET_TOUCH2_ID(x)		((x) & 0x0F) -1
+#define GET_TOUCH3_ID(x)		(((x) & 0xF0) >> 4) -1 
+#define GET_TOUCH4_ID(x)		((x) & 0x0F) -1
 #define IS_LARGE_AREA(x)		(((x) & 0x10) >> 4)
 #define FLIP_DATA_FLAG			0x01
 #define REVERSE_X_FLAG			0x02
@@ -312,162 +296,191 @@
 						(y) = tmp; \
 					}
 #define INVERT_X(x, xmax)		((xmax) - (x))
-#define INVERT_Y(y, maxy)		((maxy) - (y))
+#define INVERT_Y(y, ymax)		((ymax) - (y))
 #define SET_HSTMODE(reg, mode)		((reg) & (mode))
 #define GET_HSTMODE(reg)		((reg & 0x70) >> 4)
 #define GET_BOOTLOADERMODE(reg)		((reg & 0x10) >> 4)
 
 /* constant definitions */
 /* maximum number of concurrent ST track IDs */
-#define CY_NUM_ST_TCH_ID		2
+#define CYTTSP_NUM_ST_TOUCH_ID		2
 
 /* maximum number of concurrent MT track IDs */
-#define CY_NUM_MT_TCH_ID		4
+#define CYTTSP_NUM_MT_TOUCH_ID		4
 
 /* maximum number of track IDs */
-#define CY_NUM_TRK_ID			16
+#define CYTTSP_NUM_TRACK_ID		16
 
-#define CY_NTCH				0	/* no touch (lift off) */
-#define CY_TCH				1	/* active touch (touchdown) */
-#define CY_ST_FNGR1_IDX			0
-#define CY_ST_FNGR2_IDX			1
-#define CY_MT_TCH1_IDX			0
-#define CY_MT_TCH2_IDX			1
-#define CY_MT_TCH3_IDX			2
-#define CY_MT_TCH4_IDX			3
-#define CY_XPOS				0
-#define CY_YPOS				1
-#define CY_IGNR_TCH			(-1)
-#define CY_SMALL_TOOL_WIDTH		10
-#define CY_LARGE_TOOL_WIDTH		255
-#define CY_REG_BASE			0x00
-#define CY_REG_GEST_SET			0x1E
-#define CY_REG_ACT_INTRVL		0x1D
-#define CY_REG_TCH_TMOUT		(CY_REG_ACT_INTRVL+1)
-#define CY_REG_LP_INTRVL		(CY_REG_TCH_TMOUT+1)
-#define CY_SOFT_RESET			((1 << 0))
-#define CY_DEEP_SLEEP			((1 << 1))
-#define CY_LOW_POWER			((1 << 2))
-#define CY_MAXZ				255
-#define CY_OK				0
-#define CY_INIT				1
-#define	CY_DLY_DFLT			10	/* ms */
-#define CY_DLY_SYSINFO			20	/* ms */
-#define CY_DLY_BL			300
-#define CY_DLY_DNLOAD			100	/* ms */
-#define CY_NUM_RETRY			4	/* max num touch data read */
-
-/* handshake bit in the hst_mode reg */
-#define CY_HNDSHK_BIT			0x80
-#ifdef CY_USE_HNDSHK
-	#define CY_SEND_HNDSHK		1
-#else
-	#define CY_SEND_HNDSHK		0
+#define CYTTSP_NOTOUCH			0	/* lift off */
+#define CYTTSP_TOUCH			1	/* touch down */
+#define CYTTSP_ST_FINGER1_IDX		0
+#define CYTTSP_ST_FINGER2_IDX		1
+#define CYTTSP_MT_TOUCH1_IDX		0
+#define CYTTSP_MT_TOUCH2_IDX		1
+#define CYTTSP_MT_TOUCH3_IDX		2
+#define CYTTSP_MT_TOUCH4_IDX		3
+#define CYTTSP_XPOS			0
+#define CYTTSP_YPOS			1
+#define CYTTSP_IGNORE_TOUCH		(-1)
+#define CYTTSP_SMALL_TOOL_WIDTH		10
+#define CYTTSP_LARGE_TOOL_WIDTH		255
+#define CYTTSP_REG_BASE			0x00
+#define CYTTSP_REG_MODE			0x01
+#define CYTTSP_REG_SENSOR_BASE	0x07
+#define CYTTSP_REG_SELF_TEST		0x18
+#define CYTTSP_REG_GEST_SET		0x1E
+#define CYTTSP_REG_ACT_INTRVL		0x1D
+#define CYTTSP_REG_READ_COLOR		0x1B
+#define CYTTSP_REG_TCH_TMOUT		(CYTTSP_REG_ACT_INTRVL+1)
+#define CYTTSP_REG_LP_INTRVL		(CYTTSP_REG_TCH_TMOUT+1)
+#ifdef FEATURE_CYTTSP_FIRMWAREUPGRADE
+#define CYTTSP_REG_READ_VER_ID		0x1D
+#define CYTTPS_FIRMWARE_VER_ID		25
+  #ifdef FEATURE_SKY_NONBLACK_FIRMWARE
+	#define CYTTPS_NONBLACK_FIRMWARE_VER_ID	26
+  #endif
 #endif
 
+
+#ifdef FEATURE_CYTTSP_HEARTBEAT
+#define CYTTSP_REG_READ_HEARTBEAT	0x1C
+#endif
+
+#define CYTTSP_REG_CHARGER_MODE	0x1F
+#define CYTTPS_CHARGER_MODE		0x80
+
+//SKY define IOCTL
+#define ISSP_IOCTL_SCLK_TO_GPIO 100
+#define ISSP_IOCTL_DATA_TO_GPIO 101
+#define ISSP_IOCTL_SCLK                         102
+#define ISSP_IOCTL_DATA                         103
+#define ISSP_IOCTL_POWER                        104
+#define ISSP_IOCTL_READ_DATA_PIN        105
+#define ISSP_IOCTL_WAIT                         106
+#define ISSP_IOCTL_RESET                        107
+#define ISSP_IOCTL_INTR                         108
+#define ISSP_IOCTL_POWER_LDO            109
+#define ISSP_TEST_READ_SCL                      200
+#define ISSP_TEST_READ_SDA                      201
+#define ISSP_TEST_READ_RESET            202
+#define ISSP_COMPLITED_UPDATA           203
+#define ISSP_IOCTL_POWER_ALL            300
+// p12279 end
+
+#define CYTTSP_SOFT_RESET		((1 << 0))
+#define CYTTSP_DEEP_SLEEP		((1 << 1))
+#define CYTTSP_LOW_POWER		((1 << 2))
+#define CYTTSP_MAXZ			255
+#define CYTTSP_OPERATIONAL		0
+#define CYTTSP_INIT			1
+#define	CYTTSP_DELAY_DFLT		10	/* ms */
+#define CYTTSP_DELAY_SYSINFO		20	/* ms */
+#define CYTTSP_DELAY_BL			300
+#define CYTTSP_DELAY_DNLOAD		100	/* ms */
+#define CYTTSP_NUM_RETRY		4	/* max num touch data read */
+
 /* Bootloader File 0 offset */
-#define CY_BL_FILE0			0x00
+#define CYTTSP_BL_FILE0			0x00
 
 /* Bootloader command directive */
-#define CY_BL_CMD			0xFF
+#define CYTTSP_BL_CMD			0xFF
 
 /* Bootloader Initiate Bootload */
-#define CY_BL_INIT_LOAD			0x38
+#define CYTTSP_BL_INIT_LOAD		0x38
 
 /* Bootloader Write a Block */
-#define CY_BL_WRITE_BLK			0x39
+#define CYTTSP_BL_WRITE_BLK		0x39
 
 /* Bootloader Terminate Bootload */
-#define CY_BL_TERMINATE			0x3B
+#define CYTTSP_BL_TERMINATE		0x3B
 
 /* Bootloader Exit and Verify Checksum command */
-#define CY_BL_EXIT			0xA5
+#define CYTTSP_BL_EXIT			0xA5
 
 /* Bootloader default keys */
-#define CY_BL_KEY0			0x00
-#define CY_BL_KEY1			0x01
-#define CY_BL_KEY2			0x02
-#define CY_BL_KEY3			0x03
-#define CY_BL_KEY4			0x04
-#define CY_BL_KEY5			0x05
-#define CY_BL_KEY6			0x06
-#define CY_BL_KEY7			0x07
+#define CYTTSP_BL_KEY0			0x00
+#define CYTTSP_BL_KEY1			0x01
+#define CYTTSP_BL_KEY2			0x02
+#define CYTTSP_BL_KEY3			0x03
+#define CYTTSP_BL_KEY4			0x04
+#define CYTTSP_BL_KEY5			0x05
+#define CYTTSP_BL_KEY6			0x06
+#define CYTTSP_BL_KEY7			0x07
 
 /* Active Power state scanning/processing refresh interval */
-#define CY_ACT_INTRVL_DFLT		0x00
+#define CYTTSP_ACT_INTRVL_DFLT		0x00
 
 /* touch timeout for the Active power */
-#define CY_TCH_TMOUT_DFLT		0xFF
+#define CYTTSP_TCH_TMOUT_DFLT		0xFF
 
 /* Low Power state scanning/processing refresh interval */
-#define CY_LP_INTRVL_DFLT		0x0A
+#define CYTTSP_LP_INTRVL_DFLT		0x0A
 
-#define CY_IDLE_STATE		0
-#define CY_ACTIVE_STATE		1
-#define CY_LOW_PWR_STATE		2
-#define CY_SLEEP_STATE		3
+#define CYTTSP_IDLE_STATE		0
+#define CYTTSP_ACTIVE_STATE		1
+#define CYTTSP_LOW_PWR_STATE		2
+#define CYTTSP_SLEEP_STATE		3
 
 /* device mode bits */
-#define CY_OP_MODE		0x00
-#define CY_SYSINFO_MODE		0x10
+#define CYTTSP_OPERATE_MODE		0x00
+#define CYTTSP_SYSINFO_MODE		0x10
+#define CYTTSP_TEST_MODE		0x70
+#define CYTTSP_T_TEST_MODE		0xf0
 
 /* power mode select bits */
-#define CY_SOFT_RESET_MODE		0x01	/* return to Bootloader mode */
-#define CY_DEEP_SLEEP_MODE		0x02
-#define CY_LOW_PWR_MODE		0x04
+#define CYTTSP_SOFT_RESET_MODE		0x01	/* return to Bootloader mode */
+#define CYTTSP_DEEP_SLEEP_MODE		0x02
+#define CYTTSP_LOW_POWER_MODE		0x04
 
-#define CY_NUM_KEY			8
 
-#ifdef CY_USE_GEST
-	#define CY_USE_GESTURES	1
-#else
-	#define CY_USE_GESTURES	0
-#endif /* CY_USE_GESTURE_SIGNALS */
+/*self test error code*/
+#define CYTTSP_BIST_PROCESS	1
+#define CYTTSP_OPEN_TEST		2
+#define CYTTSP_SHORT_GND		3
+#define CYTTSP_SHORT_VDD		4
+#define CYTTSP_SHORT_PIN		5
+#define CYTTSP_LOCAL_IDAC		6
+#define CYTTSP_GLOBAL_IDAC		7
+#define CYTTSP_BASELINE_TEST	8
+#define CYTTSP_COMPLETE_BIT	9
 
-#ifdef CY_USE_GEST_GRP1
-	#define CY_GEST_GRP1	0x10
-#else
-	#define CY_GEST_GRP1	0x00
-#endif	/* CY_USE_GEST_GRP1 */
-#ifdef CY_USE_GEST_GRP2
-	#define CY_GEST_GRP2	0x20
-#else
-	#define CY_GEST_GRP2	0x00
-#endif	/* CY_USE_GEST_GRP2 */
-#ifdef CY_USE_GEST_GRP3
-	#define CY_GEST_GRP3	0x40
-#else
-	#define CY_GEST_GRP3	0x00
-#endif	/* CY_USE_GEST_GRP3 */
-#ifdef CY_USE_GEST_GRP4
-	#define CY_GEST_GRP4	0x80
-#else
-	#define CY_GEST_GRP4	0x00
-#endif	/* CY_USE_GEST_GRP4 */
+#define CYTTSP_NUM_KEY			8
 
-struct cyttsp_regulator {
-	const char *name;
-	u32	max_uV;
-	u32	min_uV;
-	u32	hpm_load_uA;
-	u32	lpm_load_uA;
-};
+#ifdef CYTTSP_USE_GEST
+	#define CYTTSP_USE_GESTURES	1
+#else
+	#define CYTTSP_USE_GESTURES	0
+#endif /* CYTTSP_USE_GESTURE_SIGNALS */
+
+#ifdef CYTTSP_USE_GEST_GRP1
+	#define CYTTSP_GEST_GRP1	0x10
+#else
+	#define CYTTSP_GEST_GRP1	0x00
+#endif	/* CYTTSP_USE_GEST_GRP1 */
+#ifdef CYTTSP_USE_GEST_GRP2
+	#define CYTTSP_GEST_GRP2	0x20
+#else
+	#define CYTTSP_GEST_GRP2	0x00
+#endif	/* CYTTSP_USE_GEST_GRP2 */
+#ifdef CYTTSP_USE_GEST_GRP3
+	#define CYTTSP_GEST_GRP3	0x40
+#else
+	#define CYTTSP_GEST_GRP3	0x00
+#endif	/* CYTTSP_USE_GEST_GRP3 */
+#ifdef CYTTSP_USE_GEST_GRP4
+	#define CYTTSP_GEST_GRP4	0x80
+#else
+	#define CYTTSP_GEST_GRP4	0x00
+#endif	/* CYTTSP_USE_GEST_GRP4 */
+
 
 struct cyttsp_platform_data {
-	u32 panel_maxx;
-	u32 panel_maxy;
-	u32 disp_resx;
-	u32 disp_resy;
-	u32 disp_minx;
-	u32 disp_miny;
-	u32 disp_maxx;
-	u32 disp_maxy;
-	u8 correct_fw_ver;
+	u32 maxx;
+	u32 maxy;
 	u32 flags;
 	u8 gen;
 	u8 use_st;
 	u8 use_mt;
-	u8 use_hndshk;
 	u8 use_trk_id;
 	u8 use_sleep;
 	u8 use_gestures;
@@ -476,23 +489,6 @@ struct cyttsp_platform_data {
 	u8 tch_tmout;
 	u8 lp_intrvl;
 	u8 power_state;
-	bool wakeup;
-	int sleep_gpio;
-	int resout_gpio;
-	int irq_gpio;
-	struct cyttsp_regulator *regulator_info;
-	u8 num_regulators;
-	const char *fw_fname;
-	bool disable_ghost_det;
-#ifdef CY_USE_I2C_DRIVER
-	s32 (*init)(struct i2c_client *client);
-	s32 (*resume)(struct i2c_client *client);
-	s32 (*suspend)(struct i2c_client *client);
-#endif
-#ifdef CY_USE_SPI_DRIVER
-	s32 (*init)(struct spi_device *spi);
-	s32 (*resume)(struct spi_device *spi);
-#endif
 };
 
 /* TrueTouch Standard Product Gen3 (Txx3xx) interface definition */
@@ -522,11 +518,11 @@ struct cyttsp_gen3_xydata_t {
 };
 
 /* TrueTouch Standard Product Gen2 (Txx2xx) interface definition */
-#define CY_GEN2_NOTOUCH		0x03	/* Both touches removed */
-#define CY_GEN2_GHOST		0x02	/* ghost */
-#define CY_GEN2_2TOUCH		0x03	/* 2 touch; no ghost */
-#define CY_GEN2_1TOUCH		0x01	/* 1 touch only */
-#define CY_GEN2_TOUCH2		0x01	/* 1st touch removed;
+#define CYTTSP_GEN2_NOTOUCH		0x03	/* Both touches removed */
+#define CYTTSP_GEN2_GHOST		0x02	/* ghost */
+#define CYTTSP_GEN2_2TOUCH		0x03	/* 2 touch; no ghost */
+#define CYTTSP_GEN2_1TOUCH		0x01	/* 1 touch only */
+#define CYTTSP_GEN2_TOUCH2		0x01	/* 1st touch removed;
 						 * 2nd touch remains */
 struct cyttsp_gen2_xydata_t {
 	u8 hst_mode;
@@ -569,7 +565,7 @@ struct cyttsp_sysinfo_data_t {
 };
 
 /* TTSP Bootloader Register Map interface definition */
-#define CY_BL_CHKSUM_OK		0x01
+#define CYTTSP_BL_CHKSUM_OK		0x01
 struct cyttsp_bootloader_data_t {
 	u8 bl_file;
 	u8 bl_status;
@@ -590,8 +586,8 @@ struct cyttsp_bootloader_data_t {
 };
 
 #define cyttsp_wake_data_t		cyttsp_gen3_xydata_t
-#ifdef CY_DECLARE_GLOBALS
-	#ifdef CY_INCLUDE_LOAD_FILE
+#ifdef CYTTSP_DECLARE_GLOBALS
+	#ifdef CYTTSP_INCLUDE_LOAD_FILE
 		/* this file declares:
 		 * firmware download block array (cyttsp_fw[]),
 		 * the number of command block records (cyttsp_fw_records),
@@ -599,7 +595,7 @@ struct cyttsp_bootloader_data_t {
 		 */
 		#include "cyttsp_fw.h"		/* imports cyttsp_fw[] array */
 		#define cyttsp_app_load()	1
-		#ifdef CY_FORCE_FW_UPDATE
+		#ifdef CYTTSP_FORCE_FW_UPDATE
 			#define cyttsp_force_fw_load()	1
 		#else
 			#define cyttsp_force_fw_load()	0
@@ -630,7 +626,7 @@ struct cyttsp_bootloader_data_t {
 	#define cyttsp_cid_0()		cyttsp_fw_cid_0
 	#define cyttsp_cid_1()		cyttsp_fw_cid_1
 	#define cyttsp_cid_2()		cyttsp_fw_cid_2
-	#ifdef CY_USE_TEST_DATA
+	#ifdef CYTTSP_USE_TEST_DATA
 		static struct cyttsp_gen2_xydata_t tt_gen2_testray[] = {
 		{0x00}, {0x00}, {0x04},
 		{0x4000}, {0x8000}, {0x80},
@@ -657,7 +653,7 @@ struct cyttsp_bootloader_data_t {
 		{0x00},
 		{0x00}
 		};
-	#endif /* CY_USE_TEST_DATA */
+	#endif /* CYTTSP_USE_TEST_DATA */
 
 #else
 		extern u8 g_appload_ray[];

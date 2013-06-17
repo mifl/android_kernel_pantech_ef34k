@@ -31,7 +31,12 @@ int mmc_send_io_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 	cmd.flags = MMC_RSP_SPI_R4 | MMC_RSP_R4 | MMC_CMD_BCR;
 
 	for (i = 100; i; i--) {
-		err = mmc_wait_for_cmd(host, &cmd, MMC_CMD_RETRIES);
+/* +++wifi_on_ issue - EF34K_RC_pz1568 */ 	
+		if(host->index == 2)
+			err = mmc_wait_for_cmd(host, &cmd, MMC_CMD_RETRIES*2);
+		else
+/* ---wifi_on_issue - EF34K_RC_pz1568 */
+			err = mmc_wait_for_cmd(host, &cmd, MMC_CMD_RETRIES);
 		if (err)
 			break;
 

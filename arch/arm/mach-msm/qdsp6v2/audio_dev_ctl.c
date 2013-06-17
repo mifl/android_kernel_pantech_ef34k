@@ -24,7 +24,18 @@
 #include <mach/debug_mm.h>
 #include <mach/qdsp6v2/q6voice.h>
 #include <sound/apr_audio.h>
+#ifdef CONFIG_RECINCALL
+#include <sound/q6afe.h>
+#endif /* CONFIG_RECINCALL */
 #include <sound/q6adm.h>
+
+#ifdef CONFIG_SKYSND_CTRL
+#include "snddev_icodec.h"
+#endif /* CONFIG_SKYSND_CTRL */
+
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+#include "sky_snd_max9879.h"
+#endif /* CONFIG_SKYSND_USE_EXTAMP */
 
 #ifndef MAX
 #define  MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -81,6 +92,10 @@ struct audio_copp_topology {
 	int topolog_id[MAX_SESSIONS];
 };
 static struct audio_copp_topology adm_tx_topology_tbl;
+
+#ifdef CONFIG_SKY_CHARGING
+extern void msm_charger_set_current_incall(unsigned int in_call);
+#endif /* CONFIG_SKY_CHARGING */
 
 int msm_reset_all_device(void)
 {
@@ -1382,6 +1397,14 @@ void broadcast_event(u32 evt_id, u32 dev_id, u64 session_id)
 		return;
 	mutex_lock(&session_lock);
 
+#ifdef CONFIG_SKY_CHARGING
+        if((evt_id == AUDDEV_EVT_START_VOICE) && (snd_extamp_get_current_callmode() != MODE_VT))
+                msm_charger_set_current_incall(true);
+
+        if(evt_id == AUDDEV_EVT_END_VOICE)
+                msm_charger_set_current_incall(false);
+#endif /* CONFIG_SKY_CHARGING */
+
 	if (evt_id == AUDDEV_EVT_VOICE_STATE_CHG)
 		routing_info.voice_state = dev_id;
 
@@ -1717,6 +1740,11 @@ static int __init audio_dev_ctrl_init(void)
 
 	memset(routing_info.copp_list, COPP_IGNORE,
 		(sizeof(unsigned int) * MAX_SESSIONS * AFE_MAX_PORTS));
+
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+	snd_extamp_api_Init();
+#endif /* CONFIG_SKYSND_USE_EXTAMP */
+	
 	return misc_register(&audio_dev_ctrl_misc);
 }
 

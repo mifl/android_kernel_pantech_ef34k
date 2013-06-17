@@ -28,6 +28,40 @@
 #define fb_height(fb)	((fb)->var.yres)
 #define fb_size(fb)	((fb)->var.xres * (fb)->var.yres * 2)
 
+#ifdef F_SKYDISP_FRAMEBUFFER_32
+typedef unsigned int IBUF_TYPE;
+#if 0
+static void memset24(void *_ptr, unsigned short val, unsigned count)
+{
+    unsigned char *ptr = _ptr;
+    unsigned char r, g, b;
+
+    r = (unsigned char)((val & 0xf800) >> 8);
+    g = (unsigned char)((val & 0x07e0) >> 3);
+    b = (unsigned char)((val & 0x001f) << 3);
+
+    count >>= 1;
+    while (count--)
+    {
+        *ptr++ = b;
+        *ptr++ = g;
+        *ptr++ = r;
+        *ptr++ = 0; // 32bpp
+    }
+}
+#else
+static void memset32(void *_ptr, unsigned int val, unsigned count)
+{
+	unsigned int *ptr = _ptr;
+	count >>= 2;
+	while (count--)
+		*ptr++ = val;
+}
+#endif
+
+#else
+typedef unsigned short IBUF_TYPE;
+
 static void memset16(void *_ptr, unsigned short val, unsigned count)
 {
 	unsigned short *ptr = _ptr;
@@ -35,6 +69,7 @@ static void memset16(void *_ptr, unsigned short val, unsigned count)
 	while (count--)
 		*ptr++ = val;
 }
+#endif  // F_SKYDISP_FRAMEBUFFER_32
 
 /* 565RLE image format: [count(2 bytes), rle(2 bytes)] */
 int load_565rle_image(char *filename)
@@ -42,7 +77,11 @@ int load_565rle_image(char *filename)
 	struct fb_info *info;
 	int fd, count, err = 0;
 	unsigned max;
+#ifdef F_SKYDISP_FRAMEBUFFER_32
+	IBUF_TYPE *data, *bits, *ptr;
+#else
 	unsigned short *data, *bits, *ptr;
+#endif
 
 	info = registered_fb[0];
 	if (!info) {
@@ -76,12 +115,20 @@ int load_565rle_image(char *filename)
 
 	max = fb_width(info) * fb_height(info);
 	ptr = data;
+#ifdef F_SKYDISP_FRAMEBUFFER_32
+	bits = (IBUF_TYPE *)(info->screen_base);
+#else
 	bits = (unsigned short *)(info->screen_base);
+#endif
 	while (count > 3) {
 		unsigned n = ptr[0];
 		if (n > max)
 			break;
+#ifdef F_SKYDISP_FRAMEBUFFER_32
+		memset32((unsigned int *)bits, ptr[1], n << 2);
+#else
 		memset16(bits, ptr[1], n << 1);
+#endif
 		bits += n;
 		max -= n;
 		ptr += 2;

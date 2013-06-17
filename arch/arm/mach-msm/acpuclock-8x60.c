@@ -30,6 +30,12 @@
 #include <mach/socinfo.h>
 #include <mach/rpm-regulator.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_DCVS_LOG) //p14291_pantech_dbg
+#include <mach/pantech_apanic.h> 
+#endif
+#endif
+
 #include "acpuclock.h"
 #include "avs.h"
 
@@ -44,7 +50,12 @@
  * Calibration should respect this limit. */
 #define L_VAL_SCPLL_CAL_MIN	0x08 /* =  432 MHz with 27MHz source */
 
+#ifdef CONFIG_SKY_CORE_VOLTAGE
+#define MAX_VDD_SC		1350000 /* uV */
+#define VDD_OFFSET            0//75000
+#else /* CONFIG_SKY_CORE_VOLTAGE */
 #define MAX_VDD_SC		1325000 /* uV */
+#endif /* CONFIG_SKY_CORE_VOLTAGE */
 #define MAX_VDD_MEM		1325000 /* uV */
 #define MAX_VDD_DIG		1200000 /* uV */
 #define MAX_AXI			 310500 /* KHz */
@@ -706,6 +717,12 @@ static int acpuclk_8x60_set_rate(int cpu, unsigned long rate,
 
 	pr_debug("Switching from ACPU%d rate %u KHz -> %u KHz\n",
 		cpu, strt_s->acpuclk_khz, tgt_s->acpuclk_khz);
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_DCVS_LOG) //p14291_pantech_dbg
+	pantech_debug_dcvs_log(cpu, strt_s->acpuclk_khz, tgt_s->acpuclk_khz);
+#endif
+#endif
 
 	/* Switch CPU speed. */
 	switch_sc_speed(cpu, tgt_s);

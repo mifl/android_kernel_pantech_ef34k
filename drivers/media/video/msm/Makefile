@@ -29,6 +29,8 @@ else
   obj-$(CONFIG_ARCH_MSM7X30) += msm_vfe31.o msm_io_vfe31.o msm_vpe1.o
 endif
 obj-$(CONFIG_ARCH_MSM8960) += msm_io_8960.o msm_vfe32.o msm_vpe.o
+obj-$(CONFIG_ICP_HD) += icp_hd.o icp_hd_reg.o camsensor_icp_hd_tuneup.o camsensor_parser.o
+obj-$(CONFIG_S5K6AAFX13) += s5k6aafx13.o s5k6aafx13_reg.o
 obj-$(CONFIG_MT9T013) += mt9t013.o mt9t013_reg.o
 obj-$(CONFIG_SN12M0PZ) += sn12m0pz.o sn12m0pz_reg.o
 obj-$(CONFIG_MT9P012) += mt9p012_reg.o

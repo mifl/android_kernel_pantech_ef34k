@@ -25,6 +25,42 @@
 #include <mach/board.h>
 #include <mach/rpc_server_handset.h>
 
+#include <mach/mpp.h>          
+#include <mach/board-msm8660.h> 
+                              
+#include <mach/vreg.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
+#include <linux/delay.h>
+#include <linux/regulator/consumer.h>                   
+#include <linux/regulator/pmic8058-regulator.h>         
+#include <linux/pmic8058-xoadc.h>
+#include <asm/irq.h>
+#include <linux/workqueue.h>
+#include <linux/errno.h>
+#include <linux/msm_adc.h>
+#include <mach/msm_xo.h>
+#include <mach/msm_hsusb.h>
+#include <linux/msm-charger.h>
+#include <linux/spinlock.h>
+#include "mpm.h"
+#include <linux/mutex.h>
+
+
+/* -------------------------------------------------------------------- */
+/* debug option */
+/* -------------------------------------------------------------------- */
+//#define EARJACK_DBG
+#ifdef EARJACK_DBG
+#define dbg_earjack(fmt, args...)   printk("[EARJACK]" fmt, ##args)
+#else /* EARJACK_DBG */
+#define dbg_earjack(fmt, args...)
+#endif /* EARJACK_DBG */
+#define dbg_func_in()       dbg_earjack("[FUNC_IN] %s\n", __func__)
+#define dbg_func_out()      dbg_earjack("[FUNC_OUT] %s\n", __func__)
+#define dbg_line()          dbg_earjack("[LINE] %d(%s)\n", __LINE__, __func__)
+/* -------------------------------------------------------------------- */
+
 #define DRIVER_NAME	"msm-handset"
 
 #define HS_SERVER_PROG 0x30000062
@@ -42,6 +78,10 @@
 #define RPC_KEYPAD_PASS_KEY_CODE_PROC 2
 #define RPC_KEYPAD_SET_PWR_KEY_STATE_PROC 3
 
+#ifdef MODEL_SKY
+#define HS_NONE_K       0x00    /* nothing  */
+#endif /* MODEL_SKY */
+
 #define HS_PWR_K		0x6F	/* Power key */
 #define HS_END_K		0x51	/* End key or Power key */
 #define HS_STEREO_HEADSET_K	0x82
@@ -54,7 +94,128 @@
 
 #define SW_HEADPHONE_INSERT_W_MIC 1 /* HS with mic */
 
-#define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
+#define HS_KEY(hs_key, input_key) ((hs_key << 24) | input_key)
+
+#define  ARR_SIZE( a )  ( sizeof( (a) ) / sizeof( (a[0]) ) )
+
+#define uint32 unsigned long
+#define uint16 unsigned short
+#define uint8  unsigned char
+
+#define int32  long
+#define int16  short
+#define int8   char
+#define TRUE  1
+#define FALSE 0
+
+
+#define EARJACK_DET     125
+#define REMOTEKEY_DET   215
+
+typedef enum{
+  SKY_HS_JACK_STATE_OFF,
+  SKY_HS_JACK_STATE_ON_4POLAR,
+  SKY_HS_JACK_STATE_ON_3POLAR,
+  SKY_HS_JACK_STATE_ON_3POLAR_CHECK,
+  SKY_HS_JACK_STATE_ON_CHECK,
+  SKY_HS_JACK_STATE_MAX,
+  SKY_HS_JACK_STATE_INIT,
+}SKY_HS_JACK_STATE_E;
+typedef struct {
+    SKY_HS_JACK_STATE_E    state;
+   
+} SKY_HS_JACK_T;
+
+static struct regulator *hs_jack_l8; //ST sylee earjack
+
+typedef enum{
+  REMOTE_3P5PI_KEY_NONE,
+  REMOTE_3P5PI_KEY_01, // send,end
+  REMOTE_3P5PI_KEY_02, // vol up
+  REMOTE_3P5PI_KEY_03, // vol down
+  REMOTE_3P5PI_KEY_04, // car kit 
+  REMOTE_3P5PI_KEY_MAX,
+} ext_3p5Pi_remode_key;
+
+typedef enum {
+  SKY_HS_NONE,
+//#if defined(FEATURE_SKY_20PIN_CONNECTOR) || defined(FEATURE_SKY_3P5PI_EARJACK)
+  SKY_HS_EAR_JACK_ON,         /* ear jack is placed */
+  SKY_HS_EAR_JACK_OFF,        /* ear jack is off */
+  SKY_HS_AV_CABLE_ON,
+  SKY_HS_AV_CABLE_OFF,
+  SKY_HS_EAR_CLICK,           /* ear jack button is clicked */
+  SKY_HS_EAR_DOUBLE_CLICK,    /* ear jack button is double-clicked */
+  SKY_HS_EAR_JACK_VOLUME_UP,
+  SKY_HS_EAR_JACK_VOLUME_DOWN,
+  SKY_HS_REMOTE_PLAY,
+  SKY_HS_REMOTE_DMB,
+  SKY_HS_REMOTE_REV,
+  SKY_HS_REMOTE_FF,
+  SKY_HS_REMOTE_REC,
+  SKY_HS_REMOTE_STOP,
+  SKY_HS_RESERVED_KEY1,
+  SKY_HS_RESERVED_KEY2,
+  SKY_HS_RESERVED_KEY3,
+
+
+  SKY_HS_MAX = 0xFFFF
+} SKY_HS_EVENT_E;
+
+
+#define TEST_HANDSET
+
+#ifdef TEST_HANDSET
+#define HS_VOL_UP_K                          0x8F
+#define HS_VOL_DOWN_K                        0x90
+#define HS_HEADSET_K                         0x7E
+#define HS_SKY_20PIN_STEREO_HEADSET_K        0xE0
+#define HS_SKY_3P5PI_STEREO_HEADSET_K        0xE1
+#define HS_SKY_3P5PI_STEREO_HEADSET_NO_MIC_K 0xE2
+#define HS_SKY_MICROUSB_TDMB_K                   0xE3
+#ifdef FEATURE_SKY_CHG_LOGO
+#define HS_SKY_CHARGING_CABLE_REMOVED_K      0xE4
+#endif //FEATURE_SKY_CHG_LOGO
+#endif //TEST_HANDSET
+
+
+typedef struct{
+    ext_3p5Pi_remode_key remode_3p5Pi_key;
+    uint16 min;
+    uint16 max;
+    SKY_HS_EVENT_E event;
+    int  keyevent;
+    uint8 bPressed;
+} remode_3p5Pi_key_type;
+//static boolean Is_3p5pi_earjack_have_MIC;
+
+//ST sylee earjack +++
+static remode_3p5Pi_key_type remode_3p5Pi_key_event[] ={                        // reffer to EF18
+    { REMOTE_3P5PI_KEY_NONE, 2400, 2600, SKY_HS_NONE, HS_NONE_K, FALSE},
+    { REMOTE_3P5PI_KEY_01,     60,  130, SKY_HS_EAR_CLICK, HS_HEADSET_SWITCH_K, FALSE},
+    { REMOTE_3P5PI_KEY_02,    420,  620, SKY_HS_EAR_JACK_VOLUME_DOWN, HS_VOL_DOWN_K, FALSE},
+    { REMOTE_3P5PI_KEY_03,    230,  390, SKY_HS_EAR_JACK_VOLUME_UP, HS_VOL_UP_K, FALSE},
+	{ REMOTE_3P5PI_KEY_04,     0,   50, SKY_HS_EAR_CLICK, HS_HEADSET_SWITCH_K, FALSE},	// car kit
+};
+//ST sylee earjack ---
+
+static SKY_HS_JACK_T sky_hs_3p5pi_jack_ctrl;                                    // static variety setting
+
+//ST sylee earjack +++
+static struct delayed_work earjack_work;
+static struct delayed_work remotekey_work;
+static void earjack_det_func(struct work_struct * earjack_work);
+static void remotekey_det_func(struct work_struct * remotekey_work);
+//ST sylee earjack ---
+static int conn_headset_type = 0;
+
+//ST sylee earjack +++
+static  uint8 remote_id = REMOTE_3P5PI_KEY_NONE;
+static  uint8 remote_key = REMOTE_3P5PI_KEY_NONE;
+static  int released=0;
+//ST sylee earjack ---
+
+#define KEY_CODE(hs_key, input_key) ((hs_key << 24) | input_key)
 
 enum hs_event {
 	HS_EVNT_EXT_PWR = 0,	/* External Power status        */
@@ -181,14 +342,27 @@ struct hs_cmd_data_type {
 };
 
 static const uint32_t hs_key_map[] = {
-	KEY(HS_PWR_K, KEY_POWER),
-	KEY(HS_END_K, KEY_END),
-	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT_W_MIC),
-	KEY(HS_HEADSET_HEADPHONE_K, SW_HEADPHONE_INSERT),
-	KEY(HS_HEADSET_MICROPHONE_K, SW_MICROPHONE_INSERT),
-	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
-	KEY(HS_HEADSET_SWITCH_2_K, KEY_VOLUMEUP),
-	KEY(HS_HEADSET_SWITCH_3_K, KEY_VOLUMEDOWN),
+	KEY_CODE(HS_PWR_K, KEY_POWER),
+	KEY_CODE(HS_END_K, KEY_END),
+	KEY_CODE(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT_W_MIC),
+	KEY_CODE(HS_HEADSET_HEADPHONE_K, SW_HEADPHONE_INSERT),
+	KEY_CODE(HS_HEADSET_MICROPHONE_K, SW_MICROPHONE_INSERT),
+	KEY_CODE(HS_HEADSET_SWITCH_K, KEY_MEDIA),
+
+    #ifdef FEATURE_SKY_3_5PHIEARJACK
+    KEY_CODE(HS_VOL_UP_K, KEY_VOLUMEUP),
+    KEY_CODE(HS_VOL_DOWN_K, KEY_VOLUMEDOWN),
+    KEY_CODE(HS_SKY_20PIN_STEREO_HEADSET_K, SW_HEADPHONE_INSERT), //20pin headset
+    KEY_CODE(HS_SKY_3P5PI_STEREO_HEADSET_K, SW_HEADPHONE_INSERT), //3.5pi headset(mic)
+    KEY_CODE(HS_SKY_3P5PI_STEREO_HEADSET_NO_MIC_K, SW_HEADPHONE_INSERT), //3.5pi headset(no mic)
+    KEY_CODE(HS_SKY_MICROUSB_TDMB_K, SW_HEADPHONE_INSERT), //20pin tdmb
+    #else /* FEATURE_SKY_3_5PHIEARJACK */
+	KEY_CODE(HS_HEADSET_SWITCH_2_K, KEY_VOLUMEUP),
+	KEY_CODE(HS_HEADSET_SWITCH_3_K, KEY_VOLUMEDOWN),
+    #endif /* FEATURE_SKY_3_5PHIEARJACK */
+    #ifdef FEATURE_SKY_CHG_LOGO
+    KEY_CODE(HS_SKY_CHARGING_CABLE_REMOVED_K, KEY_BATTERY), //charging cable key
+    #endif /* FEATURE_SKY_CHG_LOGO */
 	0
 };
 
@@ -220,6 +394,79 @@ struct msm_handset {
 	bool mic_on, hs_on;
 };
 
+//ST sylee earjack +++ 
+struct pm8xxx_mpp_info {
+	unsigned			mpp;
+	struct pm8xxx_mpp_config_data	config;
+};
+
+static void  pm8058_mpp_config_DIG(void)
+{
+	int ret;
+
+       struct pm8xxx_mpp_config_data sky_handset_digital_adc = {
+			.type	= PM8XXX_MPP_TYPE_D_INPUT,
+			.level	= PM8058_MPP_DIG_LEVEL_S3,
+			.control = PM8XXX_MPP_DIN_TO_INT,	
+		};
+
+	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_handset_digital_adc);
+
+	if (ret < 0) 
+		pr_err("%s: pm8058_mpp_config_DIG ret=%d\n",__func__, ret);
+}
+
+static void  pm8058_mpp_config_AMUX(void)
+{
+	int ret;
+
+       struct pm8xxx_mpp_config_data sky_handset_analog_adc = {
+			.type	= PM8XXX_MPP_TYPE_A_INPUT,
+			.level	= PM8XXX_MPP_AIN_AMUX_CH5,
+			.control = PM8XXX_MPP_AOUT_CTRL_DISABLE,	
+		};	
+     
+	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_handset_analog_adc);	
+       
+    	if (ret)
+   		pr_err("%s: pm8058_mpp_config_AMUX ret=%d\n",__func__, ret);	
+}
+//ST sylee earjack ---
+
+#ifdef FEATURE_SKY_3_5PHIEARJACK //PS2 P13106 Kang,Yoonkoo
+//static int conn_headset_type = 0;
+
+static ssize_t show_headset(struct device *dev, struct device_attribute *attr
+, char *buf)
+{
+    return snprintf(buf, PAGE_SIZE, "%d\n", conn_headset_type);
+}
+
+static ssize_t set_headset(struct device *dev, struct device_attribute *attr, 
+const char *buf, size_t count)
+{
+    return 0;
+}
+
+static DEVICE_ATTR(headset, S_IRUGO | S_IWUSR, show_headset, set_headset);
+
+static struct attribute *dev_attrs[] = {
+    &dev_attr_headset.attr,
+    NULL,
+};
+static struct attribute_group dev_attr_grp = {
+    .attrs = dev_attrs,
+};
+
+static void report_headset_switch(struct input_dev *dev, int key, int value)
+{
+    struct msm_handset *hs = input_get_drvdata(dev);
+    input_report_switch(dev, key, value);
+    switch_set_state(&hs->sdev, value);
+}
+
+#endif  //FEATURE_SKY_3_5PHIEARJACK
+
 static struct msm_rpc_client *rpc_client;
 static struct msm_handset *hs;
 
@@ -227,7 +474,7 @@ static int hs_find_key(uint32_t hscode)
 {
 	int i, key;
 
-	key = KEY(hscode, 0);
+	key = KEY_CODE(hscode, 0);
 
 	for (i = 0; hs_key_map[i] != 0; i++) {
 		if ((hs_key_map[i] & 0xff000000) == key)
@@ -266,6 +513,9 @@ static void update_state(void)
 static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 {
 	int key, temp_key_code;
+    #ifdef FEATURE_SKY_3_5PHIEARJACK
+    static int connType;
+    #endif /* FEATURE_SKY_3_5PHIEARJACK */
 
 	if (key_code == HS_REL_K)
 		key = hs_find_key(key_parm);
@@ -281,8 +531,14 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 	case KEY_POWER:
 	case KEY_END:
 	case KEY_MEDIA:
+#ifdef FEATURE_SKY_3_5PHIEARJACK
 	case KEY_VOLUMEUP:
 	case KEY_VOLUMEDOWN:
+    case KEY_SEND: //sylee earjack
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
+#ifdef FEATURE_SKY_CHG_LOGO
+    case KEY_BATTERY:
+#endif /* FEATURE_SKY_CHG_LOGO */
 		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
 		break;
 	case SW_HEADPHONE_INSERT_W_MIC:
@@ -295,9 +551,55 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 		break;
 
 	case SW_HEADPHONE_INSERT:
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+        if(key_code == HS_REL_K) { // release
+            switch(key_parm) {
+                case HS_SKY_20PIN_STEREO_HEADSET_K:
+                    conn_headset_type &= ~(1 << 0);
+                    connType &= ~(1 << 0);
+                    break;
+                case HS_SKY_3P5PI_STEREO_HEADSET_K:
+                    conn_headset_type &= ~(1 << 1);
+                    connType &= ~(1 << 1);
+                    break;
+                case HS_SKY_3P5PI_STEREO_HEADSET_NO_MIC_K:
+                    conn_headset_type &= ~(1 << 2);
+                    connType &= ~(1 << 2);
+                    break;
+                case HS_SKY_MICROUSB_TDMB_K:
+                    //conn_headset_type &= ~(1 << 3);
+                    connType &= ~(1 << 3);
+                    break;
+            }
+        }
+        else { // insert
+            switch(key_code) {
+                case HS_SKY_20PIN_STEREO_HEADSET_K:
+                    conn_headset_type |= (1 << 0);
+                    connType |= (1 << 0);
+                    break;
+                case HS_SKY_3P5PI_STEREO_HEADSET_K:
+                    conn_headset_type |= (1 << 1);
+                    connType |= (1 << 1);
+                    break;
+                case HS_SKY_3P5PI_STEREO_HEADSET_NO_MIC_K:
+                    conn_headset_type |= (1 << 2);
+                    connType |= (1 << 2);
+                    break;
+                case HS_SKY_MICROUSB_TDMB_K:
+                    //conn_headset_type |= (1 << 3);
+                    connType |= (1 << 3);
+                    break;
+            }
+        }
+		
+        report_headset_switch(hs->ipdev, key, connType);
+        printk(KERN_ERR "(SKY-HEADSET) Headset Detection(key:0x%x, conn_headset_type:0x%x, connType:0x%x)\n", key, conn_headset_type, connType);
+#else /* FEATURE_SKY_3_5PHIEARJACK */
 		hs->hs_on = (key_code != HS_REL_K) ? 1 : 0;
 		input_report_switch(hs->ipdev, key, hs->hs_on);
 		update_state();
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
 		break;
 	case SW_MICROPHONE_INSERT:
 		hs->mic_on = (key_code != HS_REL_K) ? 1 : 0;
@@ -597,16 +899,1059 @@ static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
 	return -EINVAL;
 }
 
+static int car_kit=0;
+#define CS_REQUIRED
+
+
+#ifdef CS_REQUIRED
+
+#define EARJACK_DETECT_POLLING_TIME					50		// 500msec
+#define EARJACK_CARKIT_EVENT_POLLING_TIME		30		// 300msec
+#define EARJACK_REMOTE_KEY_EVENT_POLLING_TIME		3		// 30msec
+typedef enum{
+	NONE_EARJACK_INSERTED = 0,
+	POLAR3_EARJACK_INSERTED = 1,
+	POLAR4_EARJACK_INSERTED = 2,
+} Earjack_current_type;
+
+typedef struct{
+    Earjack_current_type type;
+    uint16 min;
+    uint16 max;   
+} Earjack_current_state;
+
+static Earjack_current_state current_earjack_type[] ={                       
+    { NONE_EARJACK_INSERTED, 2110, 2300},
+    { POLAR4_EARJACK_INSERTED,1600,  2070},
+    { POLAR3_EARJACK_INSERTED, 0,  40},    
+};
+
+//static int earjack_state =0;
+static int before_earjack_state=0;
+static int current_earjack_state_check=0;
+static int current_earjack_state=0;
+static bool earjack_state_changed=false;
+static bool remote_key_irq_State=false;
+
+static int Earjack_FET_State = 0 ; // if 0 => failed , 1 => normal
+
+static struct delayed_work CS_earjack_work;
+static struct delayed_work CS_remotekey_work;
+
+static void CS_earjack_det_func(struct work_struct * CS_earjack_work);
+static void CS_remotekey_det_func(struct work_struct * CS_remotekey_work);
+static irqreturn_t CS_Remotekey_Det_handler(int irq, void *dev_id);
+static int check_analog_mpp(int channel,int *mv_reading);
+static int key_adc_sensing(void);    
+
+static struct wake_lock CS_earjack_wake_lock;
+static struct wake_lock CS_remotekey_wake_lock;
+static struct mutex CS_hs_mutex;
+
+static irqreturn_t CS_Remotekey_Det_handler(int irq, void *dev_id)                 // isr_CS_Remotekey_Det_handler
+{
+  dbg_func_in();
+ 
+  if(sky_hs_3p5pi_jack_ctrl.state!= SKY_HS_JACK_STATE_ON_4POLAR){
+		dbg_func_out();
+  	return IRQ_HANDLED;
+  }
+  disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));
+	wake_lock_timeout(&CS_remotekey_wake_lock, 50);        
+	schedule_delayed_work(&CS_remotekey_work,0);
+	dbg_func_out();
+  return IRQ_HANDLED;        
+}
+
+
+static void CS_earjack_det_func( struct work_struct *test_earjack)															// check earjack state          
+{
+	int nAdcValue;											// store adc value
+	int i;															// for()
+	int err;														// store return value
+	bool state_changed = false;					 
+	bool remotekey_irq_disabled = false;
+	dbg_func_in();
+	wake_lock(&CS_earjack_wake_lock);			// set wakelock
+	mutex_lock(&CS_hs_mutex);							// set mutex_lock 
+
+	if(released){																																								// if remote key press state
+		dbg_earjack("[EARJACK] CS_earjack_det_func but earjack key press state\n");
+		schedule_delayed_work(&CS_earjack_work,	EARJACK_DETECT_POLLING_TIME);
+		wake_unlock(&CS_earjack_wake_lock);
+		mutex_unlock(&CS_hs_mutex);
+		return;		
+	}
+
+	if(sky_hs_3p5pi_jack_ctrl.state == SKY_HS_JACK_STATE_ON_4POLAR){
+		remotekey_irq_disabled=true;
+		disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));		 // because mpp3 mode change make remote_key irq
+	}
+	
+	//pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);			// set mpp3 analog mode
+	pm8058_mpp_config_AMUX();
+	check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);     // read analog input mpp_3   
+	//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
+    pm8058_mpp_config_DIG();
+	dbg_earjack("CS_earjack_det_func adc value => %d\n",nAdcValue);
+
+	for( i = 0; i< ARR_SIZE( current_earjack_type ); i++ ) {																			// set current earjack state
+  	if( nAdcValue >= current_earjack_type[i].min && nAdcValue <= current_earjack_type[i].max ){
+			current_earjack_state=i;
+			dbg_earjack("@@@@CS_earjack_det_func start~!! Earjack_state=> %d\n",sky_hs_3p5pi_jack_ctrl.state);
+			break;
+		}
+	}
+	if(i!=3){
+		
+		if(current_earjack_state==before_earjack_state){																							// if before = current
+			earjack_state_changed=false;
+		}
+		else{																																													// if before != current
+			if(!earjack_state_changed){
+				current_earjack_state_check=current_earjack_state;																				// store temp state
+				earjack_state_changed=true;
+			}else{
+				if(current_earjack_state == current_earjack_state_check){
+					earjack_state_changed=false;
+					state_changed = true;
+					conn_headset_type = 0;
+					current_earjack_state_check=-1;
+					before_earjack_state=current_earjack_state;
+					sky_hs_3p5pi_jack_ctrl.state=current_earjack_state;
+					// to input event earjack state
+					switch(before_earjack_state){
+						case SKY_HS_JACK_STATE_OFF :
+							report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);					// conn_headset_type = 0
+	            dbg_earjack("@@@@ earjack conn_headset_type value => %d\n",conn_headset_type);
+							printk("[EARJACK] NONE EARJACK STATE\n");
+							break;
+						case SKY_HS_JACK_STATE_ON_4POLAR :
+							//conn_headset_type=(1 << SKY_HS_JACK_STATE_ON_4POLAR); 	// conn_headset_type =2
+							conn_headset_type=(1 << 0); 	// conn_headset_type =1
+							report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+							remote_key_irq_State=1;
+	            dbg_earjack("@@@@ earjack conn_headset_type value => %d\n",conn_headset_type);
+							printk("[EARJACK] SKY_HS_JACK_STATE_ON_4POLAR STATE\n");
+							break;
+						case SKY_HS_JACK_STATE_ON_3POLAR :
+							//conn_headset_type=(1 << SKY_HS_JACK_STATE_ON_3POLAR);	     // conn_headset_type =4
+							conn_headset_type=(1 << 1);	     // conn_headset_type =2
+							report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+	            dbg_earjack("@@@@ earjack conn_headset_type value => %d\n",conn_headset_type);
+							printk("[EARJACK] SKY_HS_JACK_STATE_ON_3POLAR STATE\n");
+							break;
+						default :
+							break;
+					}							
+				}
+				else{
+					earjack_state_changed=false;
+					current_earjack_state_check=sky_hs_3p5pi_jack_ctrl.state;
+				}				
+			}				
+		}
+	}
+	else{
+		printk("\n\n earjack function none\n");
+	}
+		
+	
+	if(state_changed){
+		if(sky_hs_3p5pi_jack_ctrl.state == SKY_HS_JACK_STATE_ON_4POLAR){
+			err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,CS_Remotekey_Det_handler, IRQF_TRIGGER_FALLING, "remote_det-irq", hs);
+			if(err) dbg_earjack("request_threaded_irq failed\n");
+		}
+		else if(remote_key_irq_State){
+			free_irq(gpio_to_irq(REMOTEKEY_DET),hs);
+		}
+	}
+	if(remotekey_irq_disabled){
+  	enable_irq(gpio_to_irq(REMOTEKEY_DET));																												// enable remote key irq	
+	}
+	schedule_delayed_work(&CS_earjack_work,	EARJACK_DETECT_POLLING_TIME);
+	wake_unlock(&CS_earjack_wake_lock);
+	mutex_unlock(&CS_hs_mutex);
+	dbg_func_out();							
+}
+
+static void CS_remotekey_det_func(struct work_struct * test_CS_remotekey_work)
+{
+	int nAdcValue=0; // store adc value
+	int key_first=0,key_second=0;    
+
+	dbg_func_in();	
+	mutex_lock(&CS_hs_mutex);
+	if(Earjack_FET_State){
+		car_kit = 0;
+		released = 0;
+		mutex_unlock(&CS_hs_mutex);
+        disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET)); 
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+	}
+
+	//pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);		// set mpp3 analog mode
+	pm8058_mpp_config_AMUX();
+	check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);   
+	//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);			// set mpp3 digital mode
+	pm8058_mpp_config_DIG();
+	
+	if(nAdcValue > current_earjack_type[NONE_EARJACK_INSERTED].min){	// if earjack is released
+		car_kit = 0;
+		released = 0;
+		mutex_unlock(&CS_hs_mutex);
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));                     
+		return ;
+	}
+	
+///////////////////////////////////////////////
+// 							if car_kit
+
+
+	if(car_kit){
+		dbg_earjack(" car kit =1 ");        
+		input_report_key(hs->ipdev, KEY_MEDIA, released);		// car kit button down
+		car_kit=0;
+		if(gpio_get_value_cansleep(REMOTEKEY_DET)==TRUE){
+			released=0;
+			input_report_key(hs->ipdev, KEY_MEDIA, released);	// car kit button up
+			dbg_earjack("@@@@ remote KKEY_MEDIA(car kit) key released~!!\n");
+			mutex_unlock(&CS_hs_mutex);
+			enable_irq(gpio_to_irq(REMOTEKEY_DET));
+			dbg_func_out();
+			return ;
+  	}
+		schedule_delayed_work(&CS_remotekey_work,EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);		// polling 100ms
+		wake_lock_timeout(&CS_remotekey_wake_lock, 50); 
+		mutex_unlock(&CS_hs_mutex);
+		return ;				
+	}
+	else {
+		car_kit=0;			
+	}
+
+///////////////////////////////////////////////
+// 							check if long key event
+
+	if(released){			// check if long key down
+		key_first=key_adc_sensing();
+         	if(key_first == remote_id){
+			schedule_delayed_work(&CS_remotekey_work,EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);		// polling 100ms
+			wake_lock_timeout(&CS_remotekey_wake_lock, 50); 
+			mutex_unlock(&CS_hs_mutex);            
+			return ;
+		}
+	}
+
+//////////////////////////////////////////////
+//							first event
+
+	if(released==0){	// if key down
+
+    //pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);		// set mpp3 analog mode
+    pm8058_mpp_config_AMUX();
+	key_first=key_adc_sensing();		     
+	key_second=key_adc_sensing();     
+	//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);			// set mpp3 digital mode
+	pm8058_mpp_config_DIG();
+	if((key_first==key_second)){
+    remote_id = key_first;
+		remote_key = remode_3p5Pi_key_event[key_first].remode_3p5Pi_key;
+    released=1;
+    switch (remote_id){
+        case 1 :    {
+            dbg_earjack("@@@@ remote KKEY_MEDIA key insert~!!\n");
+            input_report_key(hs->ipdev, KEY_MEDIA, released);
+						schedule_delayed_work(&CS_remotekey_work,EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);		// polling 30ms
+						wake_lock_timeout(&CS_remotekey_wake_lock, 50); 
+						mutex_unlock(&CS_hs_mutex);
+						return;
+            break;
+            }
+        case 2 :    {
+           dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key insert~!!\n");
+           input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+					 schedule_delayed_work(&CS_remotekey_work,EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);		// polling 30ms
+					 wake_lock_timeout(&CS_remotekey_wake_lock, 50); 
+					 mutex_unlock(&CS_hs_mutex);
+					 return;
+           break;
+            }
+        case 3 :    {
+            dbg_earjack("@@@@ remote KEY_VOLUMEUP key insert~!!\n");
+            input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+						schedule_delayed_work(&CS_remotekey_work,EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);		// polling 30ms
+						wake_lock_timeout(&CS_remotekey_wake_lock, 50); 
+						mutex_unlock(&CS_hs_mutex);
+						return;
+            break;
+            }
+				case 4 :    {
+            dbg_earjack("@@@@ remote KKEY_MEDIA(car kit) key insert~!!\n");
+						schedule_delayed_work(&CS_remotekey_work,EARJACK_CARKIT_EVENT_POLLING_TIME);				// for car kit test delay 300ms
+						wake_lock_timeout(&CS_remotekey_wake_lock, 350); 
+						car_kit=1;
+						mutex_unlock(&CS_hs_mutex);
+						return;
+            break;
+            }
+        default :   {
+						released=0;
+            dbg_earjack("@@@@ remote NONE key insert~!!\n");
+            }
+   		}
+  }
+	else{		
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+		mutex_unlock(&CS_hs_mutex);
+		dbg_func_out();
+    return ;
+	}	     
+
+	if(gpio_get_value_cansleep(REMOTEKEY_DET)==TRUE && released){															// 
+		released=0;
+		cancel_delayed_work(&CS_remotekey_work);
+    switch(remote_id){
+			case 1 :    {
+          dbg_earjack("@@@@ remote KEY_MEDIA key released~!!\n");
+          input_report_key(hs->ipdev, KEY_MEDIA, released);
+          break;
+          }
+      case 2 :    {
+          dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key released~!!\n");
+          input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+          break;
+          }
+      case 3 :    {
+          dbg_earjack("@@@@ remote KEY_VOLUMEUP key released~!!\n");
+          input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+          break;
+          }
+			case 4 :    {
+          dbg_earjack("@@@@ remote KEY_MEDIA (car kit) key released~!!\n");
+          input_report_key(hs->ipdev, KEY_MEDIA, released);
+          break;
+          }
+  		default :   {
+          break;
+          }
+      }
+    }
+  }
+///////////////////////////////////////////////
+// 						key release event
+  else if(released==1){
+    released=0;
+    switch(remote_id){
+        case 1 :    {
+            dbg_earjack("@@@@ remote KEY_MEDIA key released~!!\n");
+            input_report_key(hs->ipdev, KEY_MEDIA, released);
+            break;
+            }
+        case 2 :    {
+            dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key released~!!\n");
+            input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+            break;
+            }
+        case 3 :    {
+            dbg_earjack("@@@@ remote KEY_VOLUMEUP key released~!!\n");
+            input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+            break;
+            }
+				case 4 :    {
+            dbg_earjack("@@@@ remote KEY_MEDIA (car kit) key released~!!\n");
+            input_report_key(hs->ipdev, KEY_MEDIA, released);
+            break;
+            }
+        default :   {
+            break;
+            }
+        }
+  }        
+  else{
+    dbg_earjack("CS_remotekey_det_func released error end\n");        
+  	mutex_unlock(&CS_hs_mutex);    
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+		dbg_func_out();
+		return;
+  }
+  input_sync(hs->ipdev);
+  dbg_earjack("CS_remotekey_det_func end\n");    
+	mutex_unlock(&CS_hs_mutex);    
+	enable_irq(gpio_to_irq(REMOTEKEY_DET));
+	dbg_func_out();
+  return;
+}
+#endif /* CS_REQUIRED */
+
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+//ST sylee earjack +++
+static irqreturn_t Earjack_Det_handler(int irq, void *dev_id);
+static irqreturn_t Remotekey_Det_handler(int irq, void *dev_id);
+//ST sylee earjack ---
+static struct wake_lock earjack_wake_lock;
+static struct wake_lock remotekey_wake_lock;
+
+//ST sylee earjack +++
+static struct mutex hs_mutex;
+static struct mutex hs_remotekey_mutex;
+//static int car_kit=0;
+//ST sylee earjack ---
+
+
+static irqreturn_t Earjack_Det_handler(int irq, void *dev_id)
+{
+    disable_irq_nosync(gpio_to_irq(EARJACK_DET));
+    wake_lock(&earjack_wake_lock);
+    schedule_delayed_work(&earjack_work,10);    // after 100ms start function of earjack_det_func
+    dbg_earjack("earjack_det_handler end\n");
+    return IRQ_HANDLED;
+}
+
+static void earjack_det_func( struct work_struct *test_earjack)         
+{
+    int err;
+    if(!Earjack_FET_State && !gpio_get_value(EARJACK_DET)){
+    	mutex_lock(&CS_hs_mutex);							// set mutex_lock 
+    	printk("[EARJACK] earjack board fet is OK\n");
+    	Earjack_FET_State=true;
+    	if(sky_hs_3p5pi_jack_ctrl.state==SKY_HS_JACK_STATE_ON_4POLAR){
+    		free_irq(gpio_to_irq(REMOTEKEY_DET),hs);
+              cancel_delayed_work(&CS_remotekey_work);
+    	}
+    	conn_headset_type = 0;
+    	report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);	
+    	sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;
+    	err=regulator_is_enabled(hs_jack_l8);															// bias_disable
+       dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+       if(err>0) regulator_disable(hs_jack_l8);
+    	cancel_delayed_work(&CS_earjack_work);														// disable polling
+    	//schedule_delayed_work(&earjack_work,10);
+    	mutex_unlock(&CS_hs_mutex);							// set mutex_lock     	
+    }
+			
+		
+    dbg_earjack("@@@@earjack_det_func start~!! Earjack_state=> %d\n",sky_hs_3p5pi_jack_ctrl.state);
+	
+    switch(sky_hs_3p5pi_jack_ctrl.state)
+	{
+	     case SKY_HS_JACK_STATE_INIT :  
+
+           dbg_earjack("@@@@earjack_insert_func SKY_HS_JACK_STATE_INIT START\n");
+#if IS_EF40K /*yjw*/
+           if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+           if(gpio_get_value(EARJACK_DET)==TRUE)  
+#else
+           if(gpio_get_value(EARJACK_DET)!=TRUE) 
+#endif
+#endif	
+		   {
+		   sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_ON_CHECK;
+		   err=regulator_is_enabled(hs_jack_l8);
+		   if(err<=0)  err = regulator_enable(hs_jack_l8);
+              //pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
+                pm8058_mpp_config_DIG();
+
+		   schedule_delayed_work(&earjack_work,5);
+           }           
+		   else
+		   {
+		   sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;
+		   enable_irq(gpio_to_irq(EARJACK_DET));
+	       wake_unlock(&earjack_wake_lock);
+		   }
+		   break;
+		   
+        case SKY_HS_JACK_STATE_OFF : 
+
+            dbg_earjack("@@@@earjack_insert_func SKY_HS_JACK_STATE_OFF START\n");
+#if IS_EF40K /*yjw*/
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+            if(gpio_get_value(EARJACK_DET)!=TRUE)
+#endif
+#endif
+			{
+			sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_ON_CHECK;
+			err=regulator_is_enabled(hs_jack_l8);
+			if(err<=0)  err = regulator_enable(hs_jack_l8);
+                //pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
+                pm8058_mpp_config_DIG();
+
+			schedule_delayed_work(&earjack_work,5);
+			}
+            else
+			{                
+            enable_irq(gpio_to_irq(EARJACK_DET));      
+            wake_unlock(&earjack_wake_lock);
+            }
+			break;
+
+        case SKY_HS_JACK_STATE_ON_CHECK  :   
+
+            dbg_earjack("@@@@earjack_insert_func SKY_HS_JACK_STATE_ON_CHECK START\n");   
+#if IS_EF40K /*yjw*/
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+            if(gpio_get_value(EARJACK_DET)!=TRUE)
+#endif
+#endif
+			{
+	            if (gpio_cansleep(REMOTEKEY_DET)){
+	             	err=gpio_get_value_cansleep(REMOTEKEY_DET);
+	                dbg_earjack("gpio_get_value_cansleep(REMOTEKEY_DET) start\n");                    
+	            }
+				else{
+	             	err=gpio_get_value(REMOTEKEY_DET);
+	                dbg_earjack("gpio_get_value(REMOTEKEY_DET) start\n");
+	            }
+               
+                dbg_earjack("@@@@ PM8058_MPP3 value => %d\n",err);
+
+				if(!err){
+                    dbg_earjack("@@@@ 3pole earjack insert~!!\n");
+                    sky_hs_3p5pi_jack_ctrl.state= SKY_HS_JACK_STATE_ON_3POLAR_CHECK;
+                    conn_headset_type |= (1 << 1); // ST sylee earjack
+                    schedule_delayed_work(&earjack_work,60);      // CHECK IF 4POLAR EARJACK IS INSERTING
+                    report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+                 	dbg_earjack("@@@@conn_headset_type value => %d\n",conn_headset_type);
+					}
+                else {
+                    dbg_earjack("@@@@ 4pole earjack insert~!!\n");
+                    sky_hs_3p5pi_jack_ctrl.state= SKY_HS_JACK_STATE_ON_4POLAR;
+                    err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "remote_det-irq", hs);
+                    if(err) dbg_earjack("request_threaded_irq failed\n");
+                    conn_headset_type |= (1 << 0); // ST sylee earjack
+					report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+                 	dbg_earjack("@@@@conn_headset_type value => %d\n",conn_headset_type);
+					enable_irq(gpio_to_irq(EARJACK_DET));
+                    wake_unlock(&earjack_wake_lock);
+                    
+					}
+                 
+            }
+            else{
+                dbg_earjack("@@@@earjack_rel_func SKY_HS_JACK_STATE_ON_CHECK START\n");
+                sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;                
+				enable_irq(gpio_to_irq(EARJACK_DET));
+                wake_unlock(&earjack_wake_lock);
+				}
+            
+            break;   
+
+
+        case SKY_HS_JACK_STATE_ON_3POLAR_CHECK  :   	// CHECKING IF 4POLAR EARJACK IS INSERTIND?
+                       									
+            dbg_earjack("@@@@earjack_insert_func SKY_HS_JACK_STATE_ON_3POLAR_CHECK START\n");   
+#if IS_EF40K /*yjw*/
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+            if(gpio_get_value(EARJACK_DET)==TRUE)
+#else
+            if(gpio_get_value(EARJACK_DET)!=TRUE)
+#endif
+#endif
+			{
+                if (gpio_cansleep(REMOTEKEY_DET)){
+                 	err=gpio_get_value_cansleep(REMOTEKEY_DET);           
+                }
+				else{
+                 	err=gpio_get_value(REMOTEKEY_DET);
+                }
+            
+
+                if(!err){
+                    dbg_earjack("@@@@ 3pole earjack insert~!!\n");
+                    sky_hs_3p5pi_jack_ctrl.state= SKY_HS_JACK_STATE_ON_3POLAR;                   
+                    err=regulator_is_enabled(hs_jack_l8);
+                    dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+                    if(err>0) regulator_disable(hs_jack_l8);
+                                 
+                    }
+                else {
+                    dbg_earjack("@@@@ 4pole earjack insert~!!\n");
+                    sky_hs_3p5pi_jack_ctrl.state= SKY_HS_JACK_STATE_ON_4POLAR;
+                    err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "remote_det-irq", hs);
+                    if(err) dbg_earjack("request_threaded_irq failed\n");
+                    conn_headset_type &= ~(3 << 0); // ST sylee earjack
+                    conn_headset_type |= (1 << 0); // ST sylee earjack
+                    report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+                    dbg_earjack("@@@@conn_headset_type value => %d\n",conn_headset_type);
+                    }                 
+                 }
+            else{
+                dbg_earjack("@@@@earjack_rel_func SKY_HS_JACK_STATE_ON_CHECK START\n");
+                err=regulator_is_enabled(hs_jack_l8);
+                dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+                if(err>0) regulator_disable(hs_jack_l8);
+                sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;
+				conn_headset_type &= ~(3 << 0); // ST sylee earjack
+               	report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+				
+            }
+
+            enable_irq(gpio_to_irq(EARJACK_DET));
+            wake_unlock(&earjack_wake_lock);
+
+            break;   
+            
+        case SKY_HS_JACK_STATE_ON_3POLAR :   
+
+            dbg_earjack("@@@@earjack_rel_func SKY_HS_JACK_STATE_ON_3POLAR START\n");
+#if IS_EF40K /*yjw*/
+            if(gpio_get_value(EARJACK_DET)==FALSE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+            if(gpio_get_value(EARJACK_DET)==FALSE)
+#else
+            if(gpio_get_value(EARJACK_DET)!=FALSE)
+#endif
+#endif		
+			{
+                sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;
+                conn_headset_type &= ~(3 << 0); // ST sylee earjack
+                report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type); 
+                dbg_earjack("@@@@conn_headset_type value => %d\n",conn_headset_type);
+            }
+            enable_irq(gpio_to_irq(EARJACK_DET));
+            wake_unlock(&earjack_wake_lock);
+    	    break;
+                   
+        case SKY_HS_JACK_STATE_ON_4POLAR  :  
+
+            dbg_earjack("@@@@earjack_rel_func SKY_HS_JACK_STATE_ON_4POLAR START\n");
+#if IS_EF40K /*yjw*/
+            if(gpio_get_value(EARJACK_DET)==FALSE)
+#else
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+            if(gpio_get_value(EARJACK_DET)==FALSE)
+#else
+            if(gpio_get_value(EARJACK_DET)!=FALSE)
+#endif
+#endif
+			{
+                free_irq(gpio_to_irq(REMOTEKEY_DET), hs);
+                err=regulator_is_enabled(hs_jack_l8);
+                dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+                if(err>0){
+                    regulator_disable(hs_jack_l8);
+                    }                 
+                if(released==1){
+                    released=0;
+                    switch(remote_id){
+                        case 1 :    {
+                            dbg_earjack("@@@@ remote KEY_MEDIA key released~!!\n");
+                            input_report_key(hs->ipdev, KEY_MEDIA, released);
+                            break;
+                            }
+                        case 2 :    {
+                            dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key released~!!\n");
+                            input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+                            break;
+                            }
+                        case 3 :    {
+                            dbg_earjack("@@@@ remote KEY_VOLUMEUP key released~!!\n");
+                            input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+                            break;
+                            }
+                        default :   {
+                            break;
+                            }
+                        }
+                    input_sync(hs->ipdev);
+                }                            
+                sky_hs_3p5pi_jack_ctrl.state = SKY_HS_JACK_STATE_OFF;
+                conn_headset_type &= ~(3 << 0); // ST sylee earjack
+                report_headset_switch(hs->ipdev, SW_HEADPHONE_INSERT, conn_headset_type);
+                dbg_earjack("@@@@conn_headset_type value => %d\n",conn_headset_type);
+                dbg_earjack("@@@@earjack_release_4POLAR earjack\n");
+                //disable_irq(REMOTEKEY_DET);
+                
+			    } 
+            enable_irq(gpio_to_irq(EARJACK_DET));    
+            wake_unlock(&earjack_wake_lock);
+			break;
+
+        default :   
+
+            dbg_earjack("@@@@earjack_rel_func default START\n");
+            enable_irq(gpio_to_irq(EARJACK_DET));
+            wake_unlock(&earjack_wake_lock);
+
+        }
+    dbg_earjack("earjack_det_func end\n");
+    return;
+}
+
+
+static int check_analog_mpp(int channel,int *mv_reading)                   // read adc value 
+{
+	
+    int ret;
+	void *h;
+	struct adc_chan_result adc_chan_result;
+	struct completion  conv_complete_evt;
+    
+    //dbg_func_in();
+    
+    ret = adc_channel_open(channel, &h);
+    if (ret) {
+		pr_err("%s: couldnt open channel %d ret=%d\n",
+					__func__, channel, ret);
+		goto out;
+	}
+	init_completion(&conv_complete_evt);
+	ret = adc_channel_request_conv(h, &conv_complete_evt);
+	if (ret) {
+		pr_err("%s: couldnt request conv channel %d ret=%d\n",
+						__func__, channel, ret);
+		goto out;
+	}
+
+	wait_for_completion(&conv_complete_evt);
+/*
+	ret = wait_for_completion_interruptible(&conv_complete_evt);
+	if (ret) {
+		pr_err("%s: wait interrupted channel %d ret=%d\n",
+						__func__, channel, ret);
+		printk("wait interrupted channel \n");
+		goto out;
+	}
+*/
+	ret = adc_channel_read_result(h, &adc_chan_result);
+	if (ret) {
+		pr_err("%s: couldnt read result channel %d ret=%d\n",
+						__func__, channel, ret);
+		goto out;
+	}
+	ret = adc_channel_close(h);
+	if (ret) {
+		pr_err("%s: couldnt close channel %d ret=%d\n",
+						__func__, channel, ret);
+	}
+	if (mv_reading)
+		*mv_reading = adc_chan_result.measurement;
+
+	pr_debug("%s: done for %d\n", __func__, channel);
+	//dbg_func_out();
+	return adc_chan_result.physical;
+out:
+	pr_debug("%s: done for %d\n", __func__, channel);
+	dbg_func_out();
+	return -EINVAL;
+}
+
+
+static int key_adc_sensing(void)                                                // detect key sensing                                 
+{	
+    int nAdcValue,i;
+    dbg_func_in();
+
+        check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);                     // read analog input mpp_3    
+        dbg_earjack("@@@@analog intput mpp_03 value => %d\n",nAdcValue);
+	//printk("@@@@analog intput mpp_03 value => %d\n",nAdcValue);
+        for( i = 1; i< ARR_SIZE( remode_3p5Pi_key_event ); i++ ) {
+    		if( nAdcValue >= remode_3p5Pi_key_event[i].min && nAdcValue <= remode_3p5Pi_key_event[i].max ) {
+				dbg_func_out();
+				return i;
+    		    }
+    	    }        
+    return 0;
+}
+
+
+static void remotekey_det_func(struct work_struct * test_remotekey_work)
+{
+    	int nAdcValue=0;		
+       int key_first=0,key_second=0; 
+        
+	dbg_func_in();
+    if(sky_hs_3p5pi_jack_ctrl.state!= SKY_HS_JACK_STATE_ON_4POLAR){
+        enable_irq(gpio_to_irq(REMOTEKEY_DET));
+        //wake_unlock(&remotekey_wake_lock);
+		dbg_func_out();
+        return ;
+        }
+   
+	//pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);		// set mpp3 analog mode
+	pm8058_mpp_config_AMUX();
+	check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);      
+	//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);				// set mpp3 digital mode
+	pm8058_mpp_config_DIG();
+	
+	if(nAdcValue > remode_3p5Pi_key_event[REMOTE_3P5PI_KEY_NONE].min){									// if earjack is released
+		car_kit = 0;
+		released = 0;		
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));             
+		return ;
+	}
+       
+	if(car_kit ){
+#if IS_EF40K /*yjw*/
+    if(gpio_get_value_cansleep(EARJACK_DET)==TRUE)
+#else	
+#if (EF33S_BDVER_GE(WS20) | EF34K_BDVER_GE(WS20) | EF35L_BDVER_GE(WS20))
+    if(gpio_get_value_cansleep(EARJACK_DET)==TRUE)
+#else
+    if(gpio_get_value_cansleep(EARJACK_DET)!=TRUE)
+#endif
+#endif
+	{
+		dbg_earjack(" car kit =1 ");        
+		input_report_key(hs->ipdev, KEY_MEDIA, released);		// car kit button down
+		car_kit=0;
+		if(gpio_get_value_cansleep(REMOTEKEY_DET)==TRUE){
+			released=0;
+			input_report_key(hs->ipdev, KEY_MEDIA, released);	// car kit button up
+			}
+	}
+		car_kit=0;
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+		dbg_func_out();
+		return ;
+	}
+		
+	//mutex_lock(&hs_remotekey_mutex);
+    dbg_earjack("remotekey_det_func start\n");    
+   
+    if(released==0){
+        dbg_earjack("!gpio_get_value(REMOTEKEY_DET) && released==FALSE && !gpio_get_value(EARJACK_DET)\n");
+        
+        //pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);
+        pm8058_mpp_config_AMUX();
+
+		key_first=key_adc_sensing();
+		key_second=key_adc_sensing();        
+        pm8058_mpp_config_DIG();
+		if((key_first==key_second) && (gpio_get_value_cansleep(EARJACK_DET)==TRUE)){
+            remote_id = key_first;
+			remote_key = remode_3p5Pi_key_event[key_first].remode_3p5Pi_key;
+            released=1;
+            switch (remote_id){
+                case 1 :    {
+                    dbg_earjack("@@@@ remote KKEY_MEDIA key insert~!!\n");
+                    input_report_key(hs->ipdev, KEY_MEDIA, released);
+                    break;
+                    }
+                case 2 :    {
+                   dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key insert~!!\n");
+                   input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+                   break;
+                    }
+                case 3 :    {
+                    dbg_earjack("@@@@ remote KEY_VOLUMEUP key insert~!!\n");
+                    input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+                    break;
+                    }
+				case 4 :    {
+                    dbg_earjack("@@@@ remote KKEY_MEDIA(car kit) key insert~!!\n");
+					schedule_delayed_work(&remotekey_work,20);				// for car kit test delay 300ms
+					car_kit=1;
+                    //input_report_key(hs->ipdev, KEY_MEDIA, released);
+                    break;
+                    }
+                default :   {
+					released=0;
+                    dbg_earjack("@@@@ remote NONE key insert~!!\n");
+                    }
+                }
+            
+            }
+		else{			
+         
+            //pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);                     
+			enable_irq(gpio_to_irq(REMOTEKEY_DET));
+			//wake_unlock(&remotekey_wake_lock);
+			dbg_func_out();
+	        return ;
+		}	
+       
+         //pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
+	if(gpio_get_value_cansleep(REMOTEKEY_DET)==TRUE && released){
+			released=0;
+        switch(remote_id){
+            case 1 :    {
+                dbg_earjack("@@@@ remote KEY_MEDIA key released~!!\n");
+                input_report_key(hs->ipdev, KEY_MEDIA, released);
+                break;
+                }
+            case 2 :    {
+                dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key released~!!\n");
+                input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+                break;
+                }
+            case 3 :    {
+                dbg_earjack("@@@@ remote KEY_VOLUMEUP key released~!!\n");
+                input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+                break;
+                }
+			case 4 :    {
+                dbg_earjack("@@@@ remote KEY_MEDIA (car kit) key released~!!\n");
+                input_report_key(hs->ipdev, KEY_MEDIA, released);
+                break;
+                }
+            default :   {
+                break;
+                }
+            }
+        }
+    }
+    else if(released==1){
+        released=0;
+        switch(remote_id){
+            case 1 :    {
+                dbg_earjack("@@@@ remote KEY_MEDIA key released~!!\n");
+                input_report_key(hs->ipdev, KEY_MEDIA, released);
+                break;
+                }
+            case 2 :    {
+                dbg_earjack("@@@@ remote KEY_VOLUMEDOWN key released~!!\n");
+                input_report_key(hs->ipdev, KEY_VOLUMEDOWN, released);
+                break;
+                }
+            case 3 :    {
+                dbg_earjack("@@@@ remote KEY_VOLUMEUP key released~!!\n");
+                input_report_key(hs->ipdev, KEY_VOLUMEUP, released);
+                break;
+                }
+			case 4 :    {
+                dbg_earjack("@@@@ remote KEY_MEDIA (car kit) key released~!!\n");
+                input_report_key(hs->ipdev, KEY_MEDIA, released);
+                break;
+                }
+            default :   {
+                break;
+                }
+            }
+        }        
+    else{
+        dbg_earjack("remotekey_det_func released error end\n");        
+        //wake_unlock(&remotekey_wake_lock);
+        //mutex_unlock(&hs_remotekey_mutex);
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+		dbg_func_out();
+        return;
+    }
+
+	
+    input_sync(hs->ipdev);
+    dbg_earjack("remotekey_det_func end\n");    
+    //wake_unlock(&remotekey_wake_lock);
+    //mutex_unlock(&hs_remotekey_mutex);
+	enable_irq(gpio_to_irq(REMOTEKEY_DET));
+	dbg_func_out();
+    return;
+}
+
+static irqreturn_t Remotekey_Det_handler(int irq, void *dev_id)    // isr_Remotekey_Det_handler
+{
+    dbg_func_in();
+    if(sky_hs_3p5pi_jack_ctrl.state!= SKY_HS_JACK_STATE_ON_4POLAR){
+		dbg_func_out();
+        return IRQ_HANDLED;
+    }
+    dbg_earjack("@@@@Remote_Int_handler start~!! \n");
+    disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));
+	wake_lock_timeout(&remotekey_wake_lock, 50);        
+	//wake_lock(&remotekey_wake_lock);
+    schedule_delayed_work(&remotekey_work,0);
+	dbg_func_out();
+    return IRQ_HANDLED;        
+}
+
+static void isInserted(void)                                                        // check 3.5 earjack inserted in boot
+{    
+    int err;
+    dbg_earjack("isInserted func start\n");
+    disable_irq_nosync(gpio_to_irq(EARJACK_DET));
+    if(gpio_get_value(EARJACK_DET)){
+        enable_irq(gpio_to_irq(EARJACK_DET));
+        // If earjack detect pin is high, FET IC is failed or .
+        INIT_DELAYED_WORK(&CS_earjack_work,CS_earjack_det_func);          // INIT WORK
+        INIT_DELAYED_WORK(&CS_remotekey_work,CS_remotekey_det_func); 
+        err=regulator_is_enabled(hs_jack_l8);
+        dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+        if(err<=0) regulator_enable(hs_jack_l8);													// P13106 CS_REQUIRED
+
+        wake_lock_init(&CS_earjack_wake_lock, WAKE_LOCK_SUSPEND, "CS_earjack_wake_lock_init");
+        wake_lock_init(&CS_remotekey_wake_lock, WAKE_LOCK_SUSPEND, "CS_remotekey_wake_lock_init");
+        mutex_init(&CS_hs_mutex);                      // Init Mutex
+        //pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);		// set mpp3 analog mode for first adc read
+        pm8058_mpp_config_AMUX();
+        schedule_delayed_work(&CS_earjack_work,20);   
+
+    }else{
+        printk("\n\n earjack detection is low & FET is OK\n");
+        // If earjack detect pin is low, FET IC is OK 
+        Earjack_FET_State = 1;
+        wake_lock(&earjack_wake_lock);
+        schedule_delayed_work(&earjack_work,10);                        // after 100ms start function of earjack_det_func
+        dbg_earjack("earjack_det_handler end\n");
+        return ;
+    }
+}
+// jeongeubin 20120216 porting (-)
+
+static int hs_earjack_suspend(struct platform_device * pdev, pm_message_t state)
+{
+    dbg_earjack("hs_earjack_suspend start~!!\n");
+	if(!Earjack_FET_State){
+		cancel_delayed_work(&CS_earjack_work);
+		if(sky_hs_3p5pi_jack_ctrl.state != SKY_HS_JACK_STATE_ON_4POLAR){
+			regulator_disable(hs_jack_l8);
+		}	
+	earjack_state_changed=false;
+	}
+    return 0;
+}
+
+#ifdef MODEL_SKY	// FOR ICE-SCREAM
+static int hs_earjack_resume(struct platform_device * pdev)
+#else /* MODEL_SKY */
+static int hs_earjack_resume(struct platform_device * pdev, pm_message_t state)
+#endif /* MODEL_SKY */
+{
+	int err;
+    dbg_earjack("hs_earjack_resume start~!!\n");
+	if(!Earjack_FET_State){
+		err=regulator_is_enabled(hs_jack_l8);
+  	dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+		if(err<=0) regulator_enable(hs_jack_l8);										// P13106 CS_REQUIRED
+		schedule_delayed_work(&CS_earjack_work,5);   
+	}
+    return 0;
+}
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
+
 static int __devinit hs_probe(struct platform_device *pdev)
 {
 	int rc = 0;
+       int err = 0;
+       int ret = 0;
 	struct input_dev *ipdev;
 
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+    sky_hs_3p5pi_jack_ctrl.state=SKY_HS_JACK_STATE_INIT;
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
 	hs = kzalloc(sizeof(struct msm_handset), GFP_KERNEL);
 	if (!hs)
 		return -ENOMEM;
 
+#ifdef MODEL_SKY
+// change from "h2w because same name pmic8058-othc.c PS2 P13106
+	hs->sdev.name	= "hw2";                        
+#else /* MODEL_SKY */
 	hs->sdev.name	= "h2w";
+#endif /* MODEL_SKY */
 	hs->sdev.print_name = msm_headset_print_name;
 
 	rc = switch_dev_register(&hs->sdev);
@@ -629,18 +1974,61 @@ static int __devinit hs_probe(struct platform_device *pdev)
 		ipdev->name = hs->hs_pdata->hs_name;
 	else
 		ipdev->name	= DRIVER_NAME;
+//ST sylee earjack +++
+#ifdef TEST_HANDSET
+    { 
 
-	ipdev->id.vendor	= 0x0001;
-	ipdev->id.product	= 1;
-	ipdev->id.version	= 1;
+    dbg_earjack("@@@@TEST_HANDSET_START!!!\n");
+    
+    INIT_DELAYED_WORK(&earjack_work,earjack_det_func);          // INIT WORK
+    INIT_DELAYED_WORK(&remotekey_work,remotekey_det_func);    
+    hs_jack_l8 = regulator_get(NULL, "8058_l8");
+    regulator_set_voltage(hs_jack_l8,2400000,2400000);					// P13106 CS_REQUIRED changed 2.4v from 2.7v
+	err=regulator_is_enabled(hs_jack_l8);
+    dbg_earjack("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
+    if(err>0) regulator_disable(hs_jack_l8);
+
+	wake_lock_init(&earjack_wake_lock, WAKE_LOCK_SUSPEND, "earjack_wake_lock_init");
+    wake_lock_init(&remotekey_wake_lock, WAKE_LOCK_SUSPEND, "remotekey_wake_lock_init");
+    gpio_request(EARJACK_DET, "earjack_det");
+    gpio_request(REMOTEKEY_DET, "remotekey_det");
+    gpio_tlmm_config(GPIO_CFG(EARJACK_DET, 0, GPIO_CFG_INPUT,GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+    ret = request_irq(gpio_to_irq(EARJACK_DET), Earjack_Det_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "earjack_det-irq", hs);
+ 
+    if (ret) {
+	pr_err("%s: request irq, ret=%d\n",__func__, ret);       
+    }
+
+    mutex_init(&hs_mutex);                      // Init Mutex
+    mutex_init(&hs_remotekey_mutex);
+    
+    mutex_lock(&hs_mutex);
+    irq_set_irq_wake(gpio_to_irq(EARJACK_DET), 1);
+    irq_set_irq_wake(gpio_to_irq(REMOTEKEY_DET), 1);
+    mutex_unlock(&hs_mutex);
+    isInserted();                                               // checking is 3.5pi inserted in boot
+
+
+    }
+#endif /* ST sylee earjack --- */
+
+    ipdev->id.vendor    = 0x0001;
+    ipdev->id.product   = 1;
+    ipdev->id.version   = 1;
 
 	input_set_capability(ipdev, EV_KEY, KEY_MEDIA);
 	input_set_capability(ipdev, EV_KEY, KEY_VOLUMEUP);
 	input_set_capability(ipdev, EV_KEY, KEY_VOLUMEDOWN);
+	
+ 	input_set_capability(ipdev, EV_KEY, KEY_END); //ST sylee earjack 
 	input_set_capability(ipdev, EV_SW, SW_HEADPHONE_INSERT);
 	input_set_capability(ipdev, EV_SW, SW_MICROPHONE_INSERT);
 	input_set_capability(ipdev, EV_KEY, KEY_POWER);
 	input_set_capability(ipdev, EV_KEY, KEY_END);
+
+#ifdef FEATURE_SKY_CHG_LOGO
+    input_set_capability(ipdev, EV_KEY, KEY_BATTERY);
+#endif /* FEATURE_SKY_CHG_LOGO */
 
 	rc = input_register_device(ipdev);
 	if (rc) {
@@ -656,6 +2044,17 @@ static int __devinit hs_probe(struct platform_device *pdev)
 		dev_err(&ipdev->dev, "rpc init failure\n");
 		goto err_hs_rpc_init;
 	}
+
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+    rc = sysfs_create_group(&pdev->dev.kobj, &dev_attr_grp);
+    if (rc) {
+        dev_err(&ipdev->dev,
+                "hs_probe: sysfs_create_group rc=%d\n", rc);
+        goto err_hs_rpc_init;
+    }
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
+
+    dbg_earjack("@@@@hs_probe success!!!\n");
 
 	return 0;
 
@@ -679,6 +2078,10 @@ static int __devexit hs_remove(struct platform_device *pdev)
 	switch_dev_unregister(&hs->sdev);
 	kfree(hs);
 	hs_rpc_deinit();
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+	wake_lock_destroy(&earjack_wake_lock);
+    wake_lock_destroy(&remotekey_wake_lock);
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
 	return 0;
 }
 
@@ -689,6 +2092,10 @@ static struct platform_driver hs_driver = {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
 	},
+#ifdef FEATURE_SKY_3_5PHIEARJACK
+	.resume = hs_earjack_resume,
+	.suspend = hs_earjack_suspend,
+#endif /* FEATURE_SKY_3_5PHIEARJACK */
 };
 
 static int __init hs_init(void)

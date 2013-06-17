@@ -23,6 +23,23 @@
 #define MSM_SSBI2_I2C_BUS_ID     7
 #define MSM_SSBI3_I2C_BUS_ID     8
 
+#ifdef CONFIG_SKY_BATTERY_MAX17040
+#define MSM_GSBI11_QUP_I2C_BUS_ID	10 // ps2 team shs : fuel gauge porting
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
+
+// P12095 110301 added
+#if defined(CONFIG_SENSORS_APDS9900_SW) || defined(APDS9900_SENSORS_APDS9900_HW)
+#define MSM_GSBI5_QUP_I2C_BUS_ID    9
+#endif /* CONFIG_SENSORS_APDS9900_SW */
+
+#ifdef CONFIG_SKY_TDMB_I2C_CMD
+#define MSM_GSBI10_QUP_I2C_BUS_ID 12
+#endif /* CONFIG_SKY_TDMB_I2C_CMD */
+
+#if defined(CONFIG_PN544)
+#define MSM_GSBI1_QUP_I2C_BUS_ID 11
+#endif /* CONFIG_PN544 */
+
 #ifdef CONFIG_SND_SOC_MSM8660_APQ
 extern struct platform_device msm_pcm;
 extern struct platform_device msm_pcm_routing;

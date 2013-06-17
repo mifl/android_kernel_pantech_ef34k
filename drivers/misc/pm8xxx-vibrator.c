@@ -22,7 +22,27 @@
 
 #include "../staging/android/timed_output.h"
 
+#include <linux/timer.h>
+
+#ifdef MODEL_SKY
+// ----------------------------------------------------------------
+// DEBUG
+// ----------------------------------------------------------------
+//#define DBG_ENABLE
+
+#ifdef DBG_ENABLE
+#define dbg(fmt, args...)   printk("[VIB] " fmt, ##args)
+#else
+#define dbg(fmt, args...)
+#endif
+#define dbg_func_in()       dbg("[+] %s\n", __func__)
+#define dbg_func_out()      dbg("[-] %s\n", __func__)
+#define dbg_line()          dbg("[LINE] %d(%s)\n", __LINE__, __func__)
+// ----------------------------------------------------------------
+#define FEATURE_LEVEL_CONTROL
+
 #define VIB_DRV			0x4A
+#endif
 
 #define VIB_DRV_SEL_MASK	0xf8
 #define VIB_DRV_SEL_SHIFT	0x03
@@ -31,6 +51,11 @@
 
 #define VIB_MAX_LEVEL_mV	3100
 #define VIB_MIN_LEVEL_mV	1200
+
+#ifdef FEATURE_LEVEL_CONTROL
+//static int first_level = 20;
+static int timer_flag = false;
+#endif
 
 struct pm8xxx_vib {
 	struct hrtimer vib_timer;
@@ -42,6 +67,10 @@ struct pm8xxx_vib {
 	int state;
 	int level;
 	u8  reg_vib_drv;
+
+#ifdef FEATURE_LEVEL_CONTROL
+	struct timer_list my_timer;
+#endif
 };
 
 static struct pm8xxx_vib *vib_dev;
@@ -120,7 +149,11 @@ static int pm8xxx_vib_set(struct pm8xxx_vib *vib, int on)
 	u8 val;
 
 	if (on) {
+#ifdef FEATURE_LEVEL_CONTROL
+		val = 0;
+#else
 		val = vib->reg_vib_drv;
+#endif
 		val |= ((vib->level << VIB_DRV_SEL_SHIFT) & VIB_DRV_SEL_MASK);
 		rc = pm8xxx_vib_write_u8(vib, val, VIB_DRV);
 		if (rc < 0)
@@ -140,6 +173,56 @@ static int pm8xxx_vib_set(struct pm8xxx_vib *vib, int on)
 }
 
 static void pm8xxx_vib_enable(struct timed_output_dev *dev, int value)
+#ifdef FEATURE_LEVEL_CONTROL
+{
+	struct pm8xxx_vib *vib = container_of(dev, struct pm8xxx_vib,
+					 timed_dev);
+	unsigned long flags;
+
+	unsigned short level;
+	long timeoutms;
+
+	dbg_func_in();
+
+	spin_lock_irqsave(&vib->lock, flags);
+
+	if(!timer_flag)
+//		hrtimer_cancel(&vib->vib_timer);
+		del_timer( &vib->my_timer );
+
+
+	level = (value>>16) & 0xFFFF;
+	timeoutms = value & 0xFFFF;
+
+	if(level>0) {
+		//level = ((level*85)/100) + 3 + 11;
+		level = ((level*75)/100) + 5 + 11;
+	}
+	vib->level = level;
+	dbg("level=%d / timeoutms=%ld\n", level, timeoutms);
+
+	if (timeoutms == 0)
+		vib->state = 0;
+	else {
+		timeoutms = (timeoutms > vib->pdata->max_timeout_ms ?
+				 0x7FFFFFFF : timeoutms);
+		vib->state = 1;
+		dbg("timeoutms = %ld\n", timeoutms);
+		mod_timer( &vib->my_timer, jiffies + msecs_to_jiffies(timeoutms) );
+		
+//		hrtimer_start(&vib->vib_timer,
+//			      ktime_set(timeoutms / 1000, (timeoutms % 1000) * 1000000),
+//			      HRTIMER_MODE_REL);
+	}
+	spin_unlock_irqrestore(&vib->lock, flags);
+
+	//p12279 Fixed. 
+	pm8xxx_vib_set(vib, vib->state);	
+//	schedule_work(&vib->work);
+
+	dbg_func_out();
+}
+#else
 {
 	struct pm8xxx_vib *vib = container_of(dev, struct pm8xxx_vib,
 					 timed_dev);
@@ -166,7 +249,7 @@ retry:
 	spin_unlock_irqrestore(&vib->lock, flags);
 	schedule_work(&vib->work);
 }
-
+#endif
 static void pm8xxx_vib_update(struct work_struct *work)
 {
 	struct pm8xxx_vib *vib = container_of(work, struct pm8xxx_vib,
@@ -187,6 +270,20 @@ static int pm8xxx_vib_get_time(struct timed_output_dev *dev)
 		return 0;
 }
 
+#ifdef FEATURE_LEVEL_CONTROL
+void my_timer_callback( unsigned long data )
+{
+	timer_flag = true;
+	
+	dbg_func_in();	
+	vib_dev->state = 0;
+	schedule_work(&vib_dev->work);
+	dbg_func_out();
+
+	timer_flag = false;
+}
+#endif
+
 static enum hrtimer_restart pm8xxx_vib_timer_func(struct hrtimer *timer)
 {
 	struct pm8xxx_vib *vib = container_of(timer, struct pm8xxx_vib,
@@ -194,6 +291,10 @@ static enum hrtimer_restart pm8xxx_vib_timer_func(struct hrtimer *timer)
 
 	vib->state = 0;
 	schedule_work(&vib->work);
+
+#ifdef FEATURE_LEVEL_CONTROL
+	timer_flag = false;
+#endif
 
 	return HRTIMER_NORESTART;
 }
@@ -243,6 +344,10 @@ static int __devinit pm8xxx_vib_probe(struct platform_device *pdev)
 	spin_lock_init(&vib->lock);
 	INIT_WORK(&vib->work, pm8xxx_vib_update);
 
+#ifdef FEATURE_LEVEL_CONTROL
+	setup_timer(&vib->my_timer, my_timer_callback, 0 );
+#endif
+
 	hrtimer_init(&vib->vib_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	vib->vib_timer.function = pm8xxx_vib_timer_func;
 
@@ -270,7 +375,9 @@ static int __devinit pm8xxx_vib_probe(struct platform_device *pdev)
 	if (rc < 0)
 		goto err_read_vib;
 
+#ifndef FEATURE_LEVEL_CONTROL
 	pm8xxx_vib_enable(&vib->timed_dev, pdata->initial_vibrate_ms);
+#endif
 
 	platform_set_drvdata(pdev, vib);
 

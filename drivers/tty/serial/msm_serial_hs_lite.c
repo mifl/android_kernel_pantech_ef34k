@@ -136,6 +136,31 @@ static inline unsigned int msm_hsl_read(struct uart_port *port,
 	return ioread32(port->membase + off);
 }
 
+#ifdef FEATURE_SKY_PDIP_COMMAND
+static unsigned char b_terminal_onoff;
+static struct uart_port *console_uart_port;
+
+void msm_hsl_console_set_terminal_onoff(uint32_t onoff)
+{
+	unsigned int data;
+	//struct uart_port *port;
+
+	if(!console_uart_port) return;
+	printk(KERN_ERR "TERMINAL ONOFF[%d]\n", onoff);
+
+	if(onoff == 1){
+		b_terminal_onoff = 1;
+		data = UARTDM_CR_TX_EN_BMSK | UARTDM_CR_RX_EN_BMSK;
+		msm_hsl_write(console_uart_port, data, UARTDM_CR_ADDR);	/* enable TX & RX */
+	}else{
+		b_terminal_onoff = 0;
+		data = UARTDM_CR_TX_EN_BMSK;
+		msm_hsl_write(console_uart_port, data, UARTDM_CR_ADDR);	/* enable TX */
+	}
+}
+EXPORT_SYMBOL(msm_hsl_console_set_terminal_onoff);
+#endif
+
 static unsigned int msm_serial_hsl_has_gsbi(struct uart_port *port)
 {
 	return UART_TO_MSM(port)->is_uartdm;
@@ -263,6 +288,14 @@ static void msm_hsl_stop_tx(struct uart_port *port)
 static void msm_hsl_start_tx(struct uart_port *port)
 {
 	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
+
+#ifdef FEATURE_SKY_PDIP_COMMAND
+	struct circ_buf *xmit = &port->state->xmit;
+	if(b_terminal_onoff == 0 && console_uart_port && (port == console_uart_port)){
+		uart_circ_clear(xmit);
+		return;
+	}
+#endif
 
 	clk_en(port, 1);
 
@@ -672,9 +705,19 @@ static void msm_hsl_set_baud_rate(struct uart_port *port, unsigned int baud)
 	msm_hsl_reset(port);
 
 	data = UARTDM_CR_TX_EN_BMSK;
+
+#ifdef FEATURE_SKY_PDIP_COMMAND
+	if(b_terminal_onoff == 0 && console_uart_port && (port == console_uart_port)){
+		msm_hsl_write(port, data, UARTDM_CR_ADDR);	/* enable TX */
+	}else{
+		data |= UARTDM_CR_RX_EN_BMSK;
+		msm_hsl_write(port, data, UARTDM_CR_ADDR);	/* enable TX & RX */
+	}
+#else
 	data |= UARTDM_CR_RX_EN_BMSK;
 	/* enable TX & RX */
 	msm_hsl_write(port, data, regmap[vid][UARTDM_CR]);
+#endif
 
 	msm_hsl_write(port, RESET_STALE_INT, UARTDM_CR_ADDR);
 	/* turn on RX and CTS interrupts */
@@ -1236,6 +1279,11 @@ static int msm_hsl_console_setup(struct console *co, char *options)
 
 	printk(KERN_INFO "msm_serial_hsl: console setup on port #%d\n",
 	       port->line);
+
+#ifdef FEATURE_SKY_PDIP_COMMAND
+    console_uart_port = port;
+    b_terminal_onoff = 0;
+#endif
 
 	return ret;
 }

@@ -23,6 +23,14 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
+#include <linux/ktime.h>
+#include <linux/types.h>
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_apanic.h>
+#endif
+#endif
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -63,9 +71,22 @@ EXPORT_SYMBOL(panic_blink);
  *
  *	This function never returns.
  */
+
+#if 0//block because of error
+extern unsigned char pre_wakelock_print;
+extern unsigned char for_wakelock_print;
+extern const char *wakelock_name[4];
+extern unsigned char name_index;
+extern int64_t wakelock_time_array[4];
+#endif
+
 NORET_TYPE void panic(const char * fmt, ...)
 {
+#ifdef MODEL_SKY // Forever change Local variable to static variable...to remove compile error 
 	static char buf[1024];
+#else
+	char buf[1024];
+#endif
 	va_list args;
 	long i, i_next = 0;
 	int state = 0;
@@ -77,12 +98,23 @@ NORET_TYPE void panic(const char * fmt, ...)
 	 */
 	preempt_disable();
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+	pantechdbg_sched_msg("!!panic!!");
+#endif
+#endif
+
 	console_verbose();
 	bust_spinlocks(1);
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING //p14291_smp
+	__save_regs_and_mmu_in_panic();
+#endif
+
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	dump_stack();
 #endif
@@ -117,6 +149,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 */
 		printk(KERN_EMERG "Rebooting in %d seconds..", panic_timeout);
 
+// paiksun...
+#if defined(FEATURE_SW_RESET_RELEASE_MODE)
 		for (i = 0; i < panic_timeout * 1000; i += PANIC_TIMER_STEP) {
 			touch_nmi_watchdog();
 			if (i >= i_next) {
@@ -125,6 +159,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 			}
 			mdelay(PANIC_TIMER_STEP);
 		}
+#endif
 		/*
 		 * This will not be a clean reboot, with everything
 		 * shutting down.  But if there is a chance of

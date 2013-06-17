@@ -298,6 +298,14 @@ static int log_buf_get_len(void)
 	return logged_chars;
 }
 
+#if 1//p14291_111214
+//p14291_111214
+void* get_log_buf_addr(void)
+{
+	return (void*)log_buf;
+}
+#endif
+
 /*
  * Clears the ring-buffer
  */

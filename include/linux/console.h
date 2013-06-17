@@ -154,6 +154,10 @@ extern int braille_unregister_console(struct console *);
 extern void console_sysfs_notify(void);
 extern int console_suspend_enabled;
 
+#if 1//p14291_111214
+extern void* get_log_buf_addr(void); //p14291_111214
+#endif
+
 /* Suspend and resume console messages over PM events */
 extern void suspend_console(void);
 extern void resume_console(void);

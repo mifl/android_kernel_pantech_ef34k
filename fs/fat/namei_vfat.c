@@ -514,7 +514,11 @@ xlate_to_uni(const unsigned char *name, int len, unsigned char *outname,
 	int charlen;
 
 	if (utf8) {
+	/*<20130325> p14986 sim,jungsun. Patch func utf8s_to_utf16s.
 		*outlen = utf8s_to_utf16s(name, len, (wchar_t *)outname);
+	*/
+		*outlen = utf8s_to_utf16s(name, len, UTF16_HOST_ENDIAN,
+				(wchar_t *) outname, FAT_LFN_LEN + 2);
 		if (*outlen < 0)
 			return *outlen;
 		else if (*outlen > FAT_LFN_LEN)

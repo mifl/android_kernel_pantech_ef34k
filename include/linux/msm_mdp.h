@@ -66,6 +66,20 @@
 #define MSMFB_WRITEBACK_TERMINATE _IO(MSMFB_IOCTL_MAGIC, 155)
 #define MSMFB_MDP_PP _IOWR(MSMFB_IOCTL_MAGIC, 156, struct msmfb_mdp_pp)
 
+#ifdef F_SKYDISP_VEIL_VIEW
+#define MSMFB_SKY_VEIL_ENABLE       _IOW(MSMFB_IOCTL_MAGIC, 157,   struct msmfb_veil_view)
+#define MSMFB_SKY_VEIL_SET          _IOW(MSMFB_IOCTL_MAGIC, 158,   struct msmfb_veil_view)
+#endif
+#ifdef F_SKYDISP_LCD_RESET
+#define MSMFB_SKY_LCD_RESET_INIT    _IOW(MSMFB_IOCTL_MAGIC, 159, unsigned int)
+#endif
+#ifdef F_SKYDISP_LCD_FORCE_ONOFF 
+#define MSMFB_SKY_LCD_FORCE_ONOFF   _IOW(MSMFB_IOCTL_MAGIC, 160, unsigned int)
+#endif
+#ifdef F_SKYDISP_LCD_GAMMA_TEST
+#define MSMFB_SKY_LCD_GAMMA_SET		_IOW(MSMFB_IOCTL_MAGIC, 161, unsigned int)
+#endif
+
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
@@ -475,6 +489,16 @@ struct msmfb_mixer_info_req {
 	int cnt;
 	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
 };
+
+#ifdef F_SKYDISP_VEIL_VIEW
+struct msmfb_veil_view {
+    uint32_t lut;
+    uint32_t tex;
+    uint32_t map;
+    uint32_t size;
+    uint32_t rot;
+};
+#endif
 
 
 #ifdef __KERNEL__

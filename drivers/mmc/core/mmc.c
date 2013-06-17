@@ -912,22 +912,39 @@ static void mmc_detect(struct mmc_host *host)
 /*
  * Suspend callback from host.
  */
+
+#define QUALCOMM_PATCH
 static int mmc_suspend(struct mmc_host *host)
 {
+#ifdef QUALCOMM_PATCH
+#else
 	int err = 0;
+#endif
+
 
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
 	mmc_claim_host(host);
+
+#ifdef QUALCOMM_PATCH
+	if (!mmc_host_is_spi(host))
+#else
 	if (mmc_card_can_sleep(host))
 		err = mmc_card_sleep(host);
 	else if (!mmc_host_is_spi(host))
+#endif
+
 		mmc_deselect_cards(host);
 	host->card->state &= ~MMC_STATE_HIGHSPEED;
 	mmc_release_host(host);
 
+#ifdef QUALCOMM_PATCH
+	return 0;
+#else
 	return err;
+#endif
+
 }
 
 /*

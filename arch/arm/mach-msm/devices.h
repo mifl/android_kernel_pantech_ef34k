@@ -111,13 +111,28 @@ extern struct platform_device msm_device_i2c_2;
 extern struct platform_device qup_device_i2c;
 
 extern struct platform_device msm_gsbi0_qup_i2c_device;
+#if defined(CONFIG_PN544)
 extern struct platform_device msm_gsbi1_qup_i2c_device;
+#endif /* CONFIG_PN544 */
 extern struct platform_device msm_gsbi3_qup_i2c_device;
 extern struct platform_device msm_gsbi4_qup_i2c_device;
+#ifdef CONFIG_SENSORS_APDS9900
+extern struct platform_device msm_gsbi5_qup_i2c_device;
+#endif /* CONFIG_SENSORS_APDS9900 */
 extern struct platform_device msm_gsbi7_qup_i2c_device;
 extern struct platform_device msm_gsbi8_qup_i2c_device;
+#ifdef CONFIG_SENSORS_MPU3050
 extern struct platform_device msm_gsbi9_qup_i2c_device;
+#else /* CONFIG_SENSORS_MPU3050 */
+extern struct platform_device msm_gsbi9_qup_i2c_device;
+#endif /* CONFIG_SENSORS_MPU3050 */
 extern struct platform_device msm_gsbi12_qup_i2c_device;
+#ifdef CONFIG_SKY_TDMB_I2C_CMD
+extern struct platform_device msm_gsbi10_qup_i2c_device;
+#endif /* CONFIG_SKY_TDMB_I2C_CMD */
+#ifdef CONFIG_SKY_BATTERY_MAX17040 //PS2 TEAM SHS : PORTING FUEL GAUGE
+extern struct platform_device msm_gsbi13_qup_i2c_device;
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
 
 extern struct platform_device msm_slim_ctrl;
 extern struct platform_device msm_device_sps;

@@ -27,7 +27,19 @@
 #include <mach/msm_subsystem_map.h>
 #include <linux/ion.h>
 
-#define CONFIG_MSM_CAMERA_DEBUG
+#define DEBUG_CAM_INFO_LOG
+//SKYCAM 091127 psj add
+#ifdef DEBUG_CAM_INFO_LOG
+#define CAM_INFO(fmt, arg...) printk(KERN_ERR "Camera: " fmt "\n" , ## arg)
+#else
+#define CAM_INFO(fmt, arg...) do { } while (0)	
+#endif
+//#define CAM_INFO(fmt, arg...) printk(KERN_ERR "Camera: " fmt "\n" , ## arg)
+#define CAM_ERR(fmt, arg...)  printk(KERN_ERR  "%s: " fmt "\n" , \
+						__func__ , ## arg)
+#define CAM_WAIT(fmt, args...) do { } while (0)	
+
+//#define CONFIG_MSM_CAMERA_DEBUG
 #ifdef CONFIG_MSM_CAMERA_DEBUG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #else
@@ -416,6 +428,9 @@ struct msm_sync {
 	struct msm_strobe_flash_ctrl sfctrl;
 	struct msm_actuator_ctrl actctrl;
 	struct wake_lock wake_lock;
+#ifdef F_SKYCAM_FIX_SUSPENDLOCK_ADD
+	struct wake_lock suspendlock;
+#endif /* F_SKYCAM_FIX_SUSPENDLOCK_ADD */
 	struct platform_device *pdev;
 	int16_t ignore_qcmd_type;
 	uint8_t ignore_qcmd;

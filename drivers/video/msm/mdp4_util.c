@@ -427,7 +427,9 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 		dma->waiting = FALSE;
 		if (panel & MDP4_PANEL_DTV)
+#ifdef CONFIG_FB_MSM_DTV	// novapex_hsj 20120410 disable hdmi
 			mdp4_external_vsync_dtv();
+#endif
 		spin_unlock(&mdp_spin_lock);
 	}
 #endif
@@ -556,7 +558,9 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 		mdp_intr_mask &= ~INTR_DMA_E_DONE;
 		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 		dma->busy = FALSE;
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] 20120423 disable hdmi
 		mdp4_dma_e_done_dtv();
+#endif
 		if (dma->waiting) {
 			dma->waiting = FALSE;
 			complete(&dma->comp);

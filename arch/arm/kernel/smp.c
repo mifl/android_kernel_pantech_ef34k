@@ -633,6 +633,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CPU_STOP:
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING //p14291_smp
+		__save_regs_and_mmu(regs, false);
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 		ipi_cpu_stop(cpu);
 		break;
 

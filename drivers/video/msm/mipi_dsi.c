@@ -60,6 +60,20 @@ static struct platform_driver mipi_dsi_driver = {
 		   },
 };
 
+#if 0//def CONFIG_FB_MSM_MIPI_DSI_MAGNA		//[BIH] this code came from GB version, but make sky logo broken... so block it.
+static void mipi_lane_ctrl_ULPS(boolean on)
+{
+    if (on) {
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x1f);
+	} else {
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x1f00);
+		msleep(3);
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x00);
+	}
+}
+#endif
+
+
 struct device dsi_dev;
 
 static int mipi_dsi_off(struct platform_device *pdev)
@@ -121,6 +135,9 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	local_bh_disable();
 	mipi_dsi_clk_disable();
 	local_bh_enable();
+#if 0//def CONFIG_FB_MSM_MIPI_DSI_MAGNA		//[BIH] this code came from GB version, but make sky logo broken... so block it.
+	mipi_lane_ctrl_ULPS(1);
+#endif
 
 	/* disbale dsi engine */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0000, 0);
@@ -197,6 +214,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	local_bh_disable();
 	mipi_dsi_clk_enable();
 	local_bh_enable();
+
+#if 0//def CONFIG_FB_MSM_MIPI_DSI_MAGNA		//[BIH] this code came from GB version, but make sky logo broken... so block it.
+	mipi_lane_ctrl_ULPS(0);
+#endif
+
 
 	mipi  = &mfd->panel_info.mipi;
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {

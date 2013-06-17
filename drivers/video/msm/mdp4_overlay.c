@@ -39,6 +39,7 @@
 #include "mdp4.h"
 
 #define VERSION_KEY_MASK	0xFFFFFF00
+#define F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
 
 struct mdp4_overlay_ctrl {
 	struct mdp4_overlay_pipe plist[OVERLAY_PIPE_MAX];
@@ -187,7 +188,9 @@ void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int atv)
 		MDP_OUTP(MDP_BASE + 0xb3014, 0x1000080);
 		MDP_OUTP(MDP_BASE + 0xb4004, 0x67686970);
 	} else {
+#ifdef CONFIG_FB_MSM_EXT_INTERFACE_COMMON
 		mdp_vid_quant_set();
+#endif
 		MDP_OUTP(MDP_BASE + 0xb0070, 0xff0000);
 		MDP_OUTP(MDP_BASE + 0xb0074, 0xff0000);
 		MDP_OUTP(MDP_BASE + 0xb0078, 0xff0000);
@@ -404,7 +407,11 @@ static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 
 		if (pipe->pipe_type == OVERLAY_TYPE_VIDEO) {
 			if (pipe->flags & MDP_BACKEND_COMPOSITION &&
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+				pipe->dst_h > pipe->src_h)
+#else
 				pipe->alpha_enable && pipe->dst_h > pipe->src_h)
+#endif
 				pipe->op_mode |= MDP4_OP_SCALEY_PIXEL_RPT;
 			else if (pipe->dst_h <= (pipe->src_h / 4))
 				pipe->op_mode |= MDP4_OP_SCALEY_MN_PHASE;
@@ -427,7 +434,11 @@ static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 
 		if (pipe->pipe_type == OVERLAY_TYPE_VIDEO) {
 			if (pipe->flags & MDP_BACKEND_COMPOSITION &&
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+				pipe->dst_w > pipe->src_w)
+#else
 				pipe->alpha_enable && pipe->dst_w > pipe->src_w)
+#endif
 				pipe->op_mode |= MDP4_OP_SCALEX_PIXEL_RPT;
 			else if (pipe->dst_w <= (pipe->src_w / 4))
 				pipe->op_mode |= MDP4_OP_SCALEX_MN_PHASE;
@@ -1755,6 +1766,20 @@ static int mdp4_overlay_validate_downscale(struct mdp_overlay *req,
 		mdp4_stat.err_underflow++;
 		return -ERANGE;
 	}
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+	else if (mdp_clk_hz == 200000000)
+	{
+		if (mdp_pixels_produced <= (num_hsync_pix_clks + 50) ||
+	  	  (req->src_rect.w >= 1200 && (req->src_rect.w < req->dst_rect.w) && (req->src_rect.h > req->dst_rect.h)) ||
+		  (req->src_rect.w >= 1200 && (req->src_rect.w > req->dst_rect.w) && (req->src_rect.h < req->dst_rect.h)) )
+			return -ERANGE;
+	}else if (mdp_clk_hz == 160000000){
+		if (mdp_pixels_produced <= (num_hsync_pix_clks + 50) ||
+	  	  (req->src_rect.h >= 700 && (req->src_rect.w < req->dst_rect.w) && (req->src_rect.h > req->dst_rect.h)) ||
+		  (req->src_rect.h >= 700 && (req->src_rect.w > req->dst_rect.w) && (req->src_rect.h < req->dst_rect.h)) )
+			return -ERANGE;
+	}
+#endif
 
 	return 0;
 }
@@ -2132,20 +2157,49 @@ static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req,
 	else if (mdp4_overlay_is_rgb_type(req->src.format))
 		return OVERLAY_PERF_LEVEL1;
 
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+        if (req->src.width*req->src.height <= 0x40000)
+#else
 	if (req->src.width*req->src.height <= OVERLAY_VGA_SIZE) {
+#endif
+
+#ifndef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
 		if (mfd->mdp_rev >= MDP_REV_42)
 			return OVERLAY_PERF_LEVEL4;
 		else
 			return OVERLAY_PERF_LEVEL3;
+#else /* 1520 base */
+	{
+		if ( (req->dst_rect.h != req->src_rect.h && req->dst_rect.w != req->src_rect.w) &&
+			req->dst_rect.h * req->dst_rect.w >= req->src_rect.w * req->src_rect.h)
+			return OVERLAY_PERF_LEVEL2;
+		else
+			return OVERLAY_PERF_LEVEL3;
+#endif
 
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+	} else if (req->src.width*req->src.height <= 0xE0000) {
+
+#else
 	} else if (req->src.width*req->src.height <= OVERLAY_720P_TILE_SIZE) {
+#endif
 		u32 max, min;
 		max = (req->dst_rect.h > req->dst_rect.w) ?
 			req->dst_rect.h : req->dst_rect.w;
 		min = (mfd->panel_info.yres > mfd->panel_info.xres) ?
 			mfd->panel_info.xres : mfd->panel_info.yres;
 		if (max > min)	/* landscape mode */
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+		{
+			if ( (req->dst_rect.h != req->src_rect.h && req->dst_rect.w != req->src_rect.w) &&
+			req->dst_rect.h * req->dst_rect.w >= req->src_rect.w * req->src_rect.h)
+				return OVERLAY_PERF_LEVEL2;
+			else
+#endif
 			return OVERLAY_PERF_LEVEL3;
+#ifdef F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+		}
+#endif
 		else		/* potrait mode */
 			return OVERLAY_PERF_LEVEL2;
 	}
@@ -2205,10 +2259,14 @@ static void mdp4_overlay1_update_blt_mode(struct msm_fb_data_type *mfd)
 		return;
 	if (mfd->use_ov1_blt) {
 		mdp4_allocate_writeback_buf(mfd, MDP4_MIXER1);
+#ifdef CONFIG_FB_MSM_DTV  // Build Error (20120504 by SEOULTEK)
 		mdp4_dtv_overlay_blt_start(mfd);
+#endif
 		pr_debug("%s overlay1 writeback is enabled\n", __func__);
 	} else {
+#ifdef CONFIG_FB_MSM_DTV  // Build Error (20120504 by SEOULTEK)
 		mdp4_dtv_overlay_blt_stop(mfd);
+#endif
 		pr_debug("%s overlay1 writeback is disabled\n", __func__);
 	}
 	mfd->ov1_blt_state = mfd->use_ov1_blt;
@@ -2335,16 +2393,9 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 	if (ctrl->panel_mode & MDP4_PANEL_DTV &&
 	    pipe->mixer_num == MDP4_MIXER1) {
 		u32 use_blt = mdp4_overlay_blt_enable(req, mfd, perf_level);
-
-		if (hdmi_prim_display) {
-			if (!mdp4_overlay_is_rgb_type(req->src.format) &&
-				pipe->pipe_type == OVERLAY_TYPE_VIDEO &&
-				(req->src_rect.h > req->dst_rect.h ||
-				req->src_rect.w > req->dst_rect.w))
-				use_blt = 1;
-		}
-
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] block hdmi
 		mdp4_overlay_dtv_set(mfd, pipe);
+#endif
 		mfd->use_ov1_blt &= ~(1 << (pipe->pipe_ndx-1));
 		mfd->use_ov1_blt |= (use_blt << (pipe->pipe_ndx-1));
 	}
@@ -2369,10 +2420,13 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 				mdp4_mddi_dma_busy_wait(mfd);
 				mdp4_set_perf_level();
 			}
-		} else {
+		}
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] block hdmi
+		else {
 			if (ctrl->panel_mode & MDP4_PANEL_DTV)
 				mdp4_overlay_dtv_ov_done_push(mfd, pipe);
 		}
+#endif
 	}
 	mutex_unlock(&mfd->dma->ov_mutex);
 
@@ -2420,7 +2474,9 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 #endif
 	}
 
-	if (mfd->mdp_rev >= MDP_REV_42 && !mfd->use_ov0_blt &&
+//	if (mfd->mdp_rev >= MDP_REV_42 && !mfd->use_ov0_blt &&		//--[BIH]
+//	if (mfd->mdp_rev >= MDP_REV_41 && !mfd->use_ov0_blt &&		//--[BIH]	CSs-fixed 339120 but no effect...
+	if (mfd->mdp_rev >= MDP_REV_42 && !mfd->use_ov0_blt &&		//++[BIH]	CS -fixed 330120 rollback. It's no effect about PLM554
 		(pipe->mixer_num == MDP4_MIXER0)) {
 			ctrl->stage[pipe->mixer_num][pipe->mixer_stage] = NULL;
 	} else if (mfd->mdp_rev == MDP_REV_41 &&
@@ -2461,7 +2517,9 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 				mdp4_free_writeback_buf(mfd, MDP4_MIXER0);
 		} else {	/* mixer1, DTV, ATV */
 			if (ctrl->panel_mode & MDP4_PANEL_DTV) {
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] block hdmi
 				mdp4_overlay_dtv_unset(mfd, pipe);
+#endif
 				mfd->use_ov1_blt &= ~(1 << (pipe->pipe_ndx-1));
 				mdp4_overlay1_update_blt_mode(mfd);
 				if (!mfd->use_ov1_blt)
@@ -2546,7 +2604,9 @@ int mdp4_overlay_play_wait(struct fb_info *info, struct msmfb_overlay_data *req)
 	if (mfd->use_ov1_blt)
 		mdp4_overlay1_update_blt_mode(mfd);
 
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] block hdmi
 	mdp4_overlay_dtv_wait_for_ov(mfd, pipe);
+#endif
 
 	mutex_unlock(&mfd->dma->ov_mutex);
 	return 0;
@@ -2717,7 +2777,9 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 		ctrl->mixer1_played++;
 		/* enternal interface */
 		if (ctrl->panel_mode & MDP4_PANEL_DTV) {
+#ifdef CONFIG_FB_MSM_DTV	//[BIH] block hdmi
 			mdp4_overlay_dtv_ov_done_push(mfd, pipe);
+#endif
 			if (!mfd->use_ov1_blt)
 				mdp4_overlay1_update_blt_mode(mfd);
 			}
@@ -2789,3 +2851,14 @@ end:
 #endif
 	return ret;
 }
+
+#if defined(CONFIG_PANTECH_ERROR_LOG) || defined(CONFIG_PANTECH_ERR_CRASH_LOGGING)
+void force_mdp4_overlay_unset(void)
+{    
+    mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+    outpdw(MDP_BASE + 0x10100, 0x100); /* MDP_LAYERMIXER_IN_CFG */   
+    outpdw(MDP_BASE + 0x18000, 0x11/* bits */); /* MDP_OVERLAY_REG_FLUSH */
+    mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+}
+EXPORT_SYMBOL(force_mdp4_overlay_unset);
+#endif

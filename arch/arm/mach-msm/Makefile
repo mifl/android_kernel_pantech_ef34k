@@ -82,7 +82,7 @@ obj-$(CONFIG_MSM_SDIO_AL) += sdio_al_dloader.o
 obj-$(CONFIG_MSM_SDIO_DMUX) += sdio_dmux.o
 obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
 obj-$(CONFIG_MSM_SMD_LOGGING) += smem_log.o
-obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o remote_spinlock.o
+obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o remote_spinlock.o smd_vt.o
 obj-y += socinfo.o
 ifndef CONFIG_ARCH_MSM9615
 ifndef CONFIG_ARCH_APQ8064
@@ -317,3 +317,15 @@ obj-$(CONFIG_ARCH_MSM8960) += mdm2.o mdm_common.o
 obj-$(CONFIG_MSM_RTB) += msm_rtb.o
 obj-$(CONFIG_MSM_CACHE_ERP) += cache_erp.o
 obj-$(CONFIG_MSM_CACHE_DUMP) += msm_cache_dump.o
+
+obj-$(CONFIG_SW_RESET) += sky_sys_reset.o
+obj-$(CONFIG_PANTECH_ERR_CRASH_LOGGING) += pantech_apanic.o pantech_restart.o
+ifdef CONFIG_SKY_WLAN
+obj-$(CONFIG_PANMAC) += panmac.o rpc_nv.o
+endif
+obj-$(CONFIG_EF33_BOARD) += pantech_debug.o
+ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+obj-$(CONFIG_EF34_BOARD) += pantech_debug.o
+endif
+obj-$(CONFIG_EF35_BOARD) += pantech_debug.o
+

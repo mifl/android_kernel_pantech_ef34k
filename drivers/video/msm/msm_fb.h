@@ -207,4 +207,17 @@ void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 void fill_black_screen(void);
 void unfill_black_screen(void);
 
+//#if !defined(FEATURE_AARM_RELEASE_MODE)
+//#define LCD_MSG
+//#endif
+
+#ifdef LCD_MSG
+#define ENTER_FUNC()        printk(KERN_INFO "[LIVED] %s start\n", __FUNCTION__);
+#define EXIT_FUNC()         printk(KERN_INFO "[LIVED] %s exit \n", __FUNCTION__);
+#define PRINT(fmt, args...) printk(KERN_INFO fmt, ##args)
+#else
+#define PRINT(fmt, args...)
+#define ENTER_FUNC()
+#define EXIT_FUNC()
+#endif
 #endif /* MSM_FB_H */

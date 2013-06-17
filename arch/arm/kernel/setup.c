@@ -603,6 +603,13 @@ __tagtable(ATAG_CORE, parse_tag_core);
 
 static int __init parse_tag_mem32(const struct tag *tag)
 {
+#if 0 //def CONFIG_EF34_BOARD
+	if(tag->u.mem.start == 0x40200000 && tag->u.mem.size == 0x02C00000)
+	{
+		printk("for upgrade start 0x%x size 0x%x\n", tag->u.mem.start, tag->u.mem.size);
+		return arm_add_memory(tag->u.mem.start, 0x02B00000);
+	}
+#endif /* CONFIG_EF34_BOARD */
 	return arm_add_memory(tag->u.mem.start, tag->u.mem.size);
 }
 

@@ -210,6 +210,7 @@ static int sdio_disable_cd(struct mmc_card *card)
  * Devices that remain active during a system suspend are
  * put back into 1-bit mode.
  */
+#ifndef CONFIG_SKY_WLAN
 static int sdio_disable_wide(struct mmc_card *card)
 {
 	int ret;
@@ -239,6 +240,7 @@ static int sdio_disable_wide(struct mmc_card *card)
 
 	return 0;
 }
+#endif
 
 
 static int sdio_enable_4bit_bus(struct mmc_card *card)
@@ -669,11 +671,13 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 		}
 	}
 
+#ifndef CONFIG_SKY_WLAN
 	if (!err && mmc_card_keep_power(host) && mmc_card_wake_sdio_irq(host)) {
 		mmc_claim_host(host);
 		sdio_disable_wide(host->card);
 		mmc_release_host(host);
 	}
+#endif
 
 	return err;
 }
@@ -685,6 +689,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
+#ifndef CONFIG_SKY_WLAN 
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
 
@@ -707,6 +712,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	if (!err && host->sdio_irqs)
 		mmc_signal_sdio_irq(host);
 	mmc_release_host(host);
+#endif // CONFIG_SKY_WLAN
 
 	/*
 	 * If the card looked to be the same as before suspending, then

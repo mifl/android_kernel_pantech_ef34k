@@ -85,6 +85,9 @@ struct smsm_shared_info {
 	uint32_t *state;
 	uint32_t *intr_mask;
 	uint32_t *intr_mux;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	unsigned char *crash_buf;
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 };
 
 static struct smsm_shared_info smsm_info;
@@ -485,10 +488,15 @@ void smd_diag(void)
 	x = smem_get_entry(SMEM_ERR_CRASH_LOG, &size);
 	if (x != 0) {
 		x[size - 1] = 0;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+		pr_err("********* Modem Error Log ********\n");
+		pr_err("%s\n", x);
+		pr_err("**********************************\n");
+#else
 		pr_err("smem: CRASH LOG\n'%s'\n", x);
+#endif
 	}
 }
-
 
 static void handle_modem_crash(void)
 {
@@ -2212,6 +2220,13 @@ static int smsm_init(void)
 						 SMSM_NUM_INTR_MUX *
 						 sizeof(uint32_t));
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	if(!smsm_info.crash_buf)
+		smsm_info.crash_buf = smem_alloc2(SMEM_ID_VENDOR2,
+						 MAX_CRASH_BUF_SIZE * 
+						 sizeof(unsigned char));
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
+
 	i = smsm_cb_init();
 	if (i)
 		return i;
@@ -2376,6 +2391,9 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 				apps |= SMSM_RESET;
 
 			pr_err("\nSMSM: Modem SMSM state changed to SMSM_RESET.");
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+			smd_diag();
+#endif
 			modem_queue_start_reset_notify();
 
 		} else if (modm & SMSM_INIT) {

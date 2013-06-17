@@ -35,7 +35,17 @@
 #include <asm/unwind.h>
 #include <asm/tls.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_SCHED_LOG) //p14291_pantech_dbg
+#include <mach/pantech_apanic.h>
+#endif
+#endif /* CONFIG_PANTECH_DEBUG */
+
 #include "signal.h"
+
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+#include "../mach-msm/sky_sys_reset.h"
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
 
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
@@ -244,6 +254,10 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 
 	print_modules();
 	__show_regs(regs);
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING  //p14291_smp
+	__save_regs_and_mmu(regs, true);
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
+
 	printk(KERN_EMERG "Process %.*s (pid: %d, stack limit = 0x%p)\n",
 		TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
 
@@ -271,6 +285,13 @@ void die(const char *str, struct pt_regs *regs, int err)
 	oops_enter();
 
 	raw_spin_lock_irq(&die_lock);
+	
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_SCHED_LOG)  //p14291_121102
+	pantechdbg_sched_msg("!!die!!");
+#endif
+#endif /* CONFIG_PANTECH_DEBUG */
+
 	console_verbose();
 	bust_spinlocks(1);
 	if (!user_mode(regs))
@@ -287,10 +308,20 @@ void die(const char *str, struct pt_regs *regs, int err)
 	raw_spin_unlock_irq(&die_lock);
 	oops_exit();
 
+#ifdef FEATURE_SKY_PWR_ONOFF_REASON_CNT
+	sky_reset_reason=SYS_RESET_REASON_LINUX;
+#endif /* FEATURE_SKY_PWR_ONOFF_REASON_CNT */
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	if (in_interrupt())
+		panic("Fatal exception in interrupt : %s",str);
+	if (panic_on_oops)
+		panic("Fatal exception : %s",str);
+#else /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 	if (panic_on_oops)
 		panic("Fatal exception");
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 	if (ret != NOTIFY_STOP)
 		do_exit(SIGSEGV);
 }

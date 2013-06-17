@@ -146,6 +146,11 @@ config FB_MSM_LCDC_PANEL
 	select FB_MSM_LCDC
 	default n
 
+config FB_MSM_MIPI_DSI_MAGNA
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
 config FB_MSM_MIPI_DSI_TOSHIBA
 	bool
 	select FB_MSM_MIPI_DSI
@@ -245,6 +250,11 @@ config FB_MSM_LCDC_NT35582_WVGA
 config FB_MSM_LCDC_WXGA
 	bool
 	select FB_MSM_LCDC_PANEL
+	default n
+
+config FB_MSM_MIPI_MAGNA_VIDEO_WVGA
+	bool
+	select FB_MSM_MIPI_DSI_MAGNA
 	default n
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
@@ -487,6 +497,10 @@ config FB_MSM_MDDI_SHARP_QVGA_128x128
 	select FB_MSM_MDDI
 	---help---
 	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
+
+config FB_MSM_MIPI_MAGNA_VIDEO_WVGA_PANEL
+	bool "MIPI Magna WVGA Panel"
+	select FB_MSM_MIPI_MAGNA_VIDEO_WVGA
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT_PANEL
 	bool "MIPI Toshiba WVGA PT Panel"

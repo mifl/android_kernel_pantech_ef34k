@@ -316,6 +316,29 @@ struct platform_device msm_device_uart_dm12 = {
 	.resource = msm_uart12_dm_resources,
 };
 
+#if defined(CONFIG_PN544)
+static struct resource gsbi1_qup_i2c_resources[] = {
+        {
+            .name   = "qup_phys_addr",
+            .start  = MSM_GSBI1_QUP_PHYS,
+            .end    = MSM_GSBI1_QUP_PHYS + SZ_4K - 1,
+            .flags  = IORESOURCE_MEM,
+        },
+        {
+            .name   = "gsbi_qup_i2c_addr",
+            .start  = MSM_GSBI1_PHYS,
+            .end    = MSM_GSBI1_PHYS + 4 - 1,
+            .flags  = IORESOURCE_MEM,
+        },
+        {
+            .name   = "qup_err_intr",
+            .start  = GSBI1_QUP_IRQ,
+            .end    = GSBI1_QUP_IRQ,
+            .flags  = IORESOURCE_IRQ,
+        },
+};
+#endif /* CONFIG_PN544 */
+
 #ifdef CONFIG_MSM_GSBI9_UART
 static struct msm_serial_hslite_platform_data uart_gsbi9_pdata = {
 	.config_gpio	= 1,
@@ -408,6 +431,29 @@ static struct resource gsbi4_qup_i2c_resources[] = {
 	},
 };
 
+#ifdef CONFIG_SKY_BATTERY_MAX17040 // ps2 team shs : add fuel gauge
+static struct resource gsbi11_qup_i2c_resources[] = {
+	 {
+		.name   = "qup_phys_addr",
+		.start  = MSM_GSBI11_QUP_PHYS,
+		.end    = MSM_GSBI11_QUP_PHYS + SZ_4K - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "gsbi_qup_i2c_addr",
+		.start  = MSM_GSBI11_PHYS,
+		.end    = MSM_GSBI11_PHYS + 4 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "qup_err_intr",
+		.start  = GSBI11_QUP_IRQ,
+		.end    = GSBI11_QUP_IRQ,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
+
 static struct resource gsbi7_qup_i2c_resources[] = {
 	{
 		.name	= "qup_phys_addr",
@@ -462,6 +508,8 @@ static struct resource gsbi8_qup_i2c_resources[] = {
 	},
 };
 
+// P12095 added 110301
+#ifdef CONFIG_SENSORS_MPU3050
 static struct resource gsbi9_qup_i2c_resources[] = {
 	{
 		.name	= "qup_phys_addr",
@@ -482,6 +530,52 @@ static struct resource gsbi9_qup_i2c_resources[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 };
+#else /*CONFIG_SENSORS_MPU3050 */
+static struct resource gsbi9_qup_i2c_resources[] = {
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI9_QUP_PHYS,
+		.end	= MSM_GSBI9_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI9_PHYS,
+		.end	= MSM_GSBI9_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= GSBI9_QUP_IRQ,
+		.end	= GSBI9_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+#endif /* CONFIG_SENSORS_MPU3050 */
+
+// P12095 added 110301
+#if defined(CONFIG_SENSORS_APDS9900_HW)
+static struct resource gsbi5_qup_i2c_resources[] = {
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI5_QUP_PHYS,
+		.end	= MSM_GSBI5_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI5_PHYS,
+		.end	= MSM_GSBI5_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= GSBI5_QUP_IRQ,
+		.end	= GSBI5_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+#endif /* CONFIG_SENSORS_APDS9900_HW */
 
 static struct resource gsbi12_qup_i2c_resources[] = {
 	{
@@ -837,6 +931,16 @@ void __init msm8x60_check_2d_hardware(void)
 	}
 }
 
+#if defined(CONFIG_PN544)
+/* Use GSBI2 QUP for /dev/i2c-11 */
+struct platform_device msm_gsbi1_qup_i2c_device = {
+    .name           = "qup_i2c",
+    .id             = MSM_GSBI1_QUP_I2C_BUS_ID,
+    .num_resources  = ARRAY_SIZE(gsbi1_qup_i2c_resources),
+    .resource       = gsbi1_qup_i2c_resources,
+};
+#endif /* CONFIG_PN544 */
+
 /* Use GSBI3 QUP for /dev/i2c-0 */
 struct platform_device msm_gsbi3_qup_i2c_device = {
 	.name		= "qup_i2c",
@@ -853,6 +957,15 @@ struct platform_device msm_gsbi4_qup_i2c_device = {
 	.resource	= gsbi4_qup_i2c_resources,
 };
 
+#ifdef CONFIG_SKY_BATTERY_MAX17040 // ps2 team shs : fuel gauge porting
+struct platform_device msm_gsbi13_qup_i2c_device = {
+	 .name           = "qup_i2c",
+	.id             = MSM_GSBI11_QUP_I2C_BUS_ID,
+	.num_resources  = ARRAY_SIZE(gsbi11_qup_i2c_resources),
+	.resource       = gsbi11_qup_i2c_resources,
+};
+#endif /* CONFIG_SKY_BATTERY_MAX17040 */
+
 /* Use GSBI8 QUP for /dev/i2c-3 */
 struct platform_device msm_gsbi8_qup_i2c_device = {
 	.name		= "qup_i2c",
@@ -862,12 +975,32 @@ struct platform_device msm_gsbi8_qup_i2c_device = {
 };
 
 /* Use GSBI9 QUP for /dev/i2c-2 */
+// P12095 added 110301
+#ifdef CONFIG_SENSORS_MPU3050
 struct platform_device msm_gsbi9_qup_i2c_device = {
 	.name		= "qup_i2c",
 	.id		= MSM_GSBI9_QUP_I2C_BUS_ID,
 	.num_resources	= ARRAY_SIZE(gsbi9_qup_i2c_resources),
 	.resource	= gsbi9_qup_i2c_resources,
 };
+#else /* CONFIG_SENSORS_MPU3050 */
+struct platform_device msm_gsbi9_qup_i2c_device = {
+	.name		= "qup_i2c",
+	.id		= MSM_GSBI9_QUP_I2C_BUS_ID,
+	.num_resources	= ARRAY_SIZE(gsbi9_qup_i2c_resources),
+	.resource	= gsbi9_qup_i2c_resources,
+};
+#endif /* CONFIG_SENSORS_MPU3050 */
+
+// P12095 added 110301
+#if defined(CONFIG_SENSORS_APDS9900_HW)
+struct platform_device msm_gsbi5_qup_i2c_device = {
+	.name		= "qup_i2c",
+	.id		= MSM_GSBI5_QUP_I2C_BUS_ID,
+	.num_resources	= ARRAY_SIZE(gsbi5_qup_i2c_resources),
+	.resource	= gsbi5_qup_i2c_resources,
+};
+#endif /* CONFIG_SENSORS_APDS9900_HW */
 
 /* Use GSBI7 QUP for /dev/i2c-4 (Marimba) */
 struct platform_device msm_gsbi7_qup_i2c_device = {
@@ -1554,6 +1687,16 @@ struct platform_device msm_rotator_device = {
 };
 #endif
 
+#ifdef CONFIG_SKY_TDMB_EBI_IF
+static struct resource msm_tdmb_resources[] = {
+  {
+    .name   = "tdmb_dev",
+    .start  = 0x1A800000,
+    .end    = 0x1A800000 + PAGE_SIZE - 1, //0x1B000000 - 1,
+    .flags  = IORESOURCE_MEM,
+  },
+};
+#endif /* CONFIG_SKY_TDMB_EBI_IF */
 
 /* Sensors DSPS platform data */
 #ifdef CONFIG_MSM_DSPS
@@ -1675,6 +1818,15 @@ static void __init msm_register_device(struct platform_device *pdev, void *data)
 			  __func__, ret);
 }
 
+#ifdef CONFIG_SKY_TDMB_EBI_IF
+static struct platform_device msm_tdmb_device = {
+	.name   = "tdmb_dev",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(msm_tdmb_resources),
+	.resource       = msm_tdmb_resources,
+};
+#endif /* CONFIG_SKY_TDMB_EBI_IF */
+
 static struct platform_device msm_lcdc_device = {
 	.name   = "lcdc",
 	.id     = 0,
@@ -1702,6 +1854,14 @@ static struct platform_device msm_dtv_device = {
 	.id     = 0,
 };
 #endif
+
+#ifdef CONFIG_SKY_TDMB_EBI_IF
+void __init msm_tdmb_register_device(void *data)
+{
+	printk(KERN_ERR "[msm_tdmb_register_device]\n");
+	msm_register_device(&msm_tdmb_device, data);
+}
+#endif /* CONFIG_SKY_TDMB_EBI_IF */
 
 void __init msm_fb_register_device(char *name, void *data)
 {
@@ -1800,6 +1960,7 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 #define MSM_TSIF_SIZE        (0x200)
 #define TCSR_ADM_0_A_CRCI_MUX_SEL 0x0070
 
+#if 0
 #define TSIF_0_CLK       GPIO_CFG(93, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_0_EN        GPIO_CFG(94, 1, GPIO_CFG_INPUT, \
@@ -1808,6 +1969,12 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_0_SYNC      GPIO_CFG(96, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+#else /*  */
+#define TSIF_0_CLK
+#define TSIF_0_EN
+#define TSIF_0_DATA
+#define TSIF_0_SYNC
+#endif /*  */
 #define TSIF_1_CLK       GPIO_CFG(97, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_1_EN        GPIO_CFG(98, 1, GPIO_CFG_INPUT, \
@@ -1818,10 +1985,12 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 
 static const struct msm_gpio tsif0_gpios[] = {
+#if 0
 	{ .gpio_cfg = TSIF_0_CLK,  .label =  "tsif_clk", },
 	{ .gpio_cfg = TSIF_0_EN,   .label =  "tsif_en", },
 	{ .gpio_cfg = TSIF_0_DATA, .label =  "tsif_data", },
 	{ .gpio_cfg = TSIF_0_SYNC, .label =  "tsif_sync", },
+#endif /*  */
 };
 
 static const struct msm_gpio tsif1_gpios[] = {
@@ -1833,8 +2002,10 @@ static const struct msm_gpio tsif1_gpios[] = {
 
 static void tsif_release(struct device *dev)
 {
+	dev_info(dev, "release\n");
 }
 
+#if 0 /* 20120217. WSH, build error¢®¢´I AIC¡§¨£ ¡Ë¡þ¢®¢´A¡§o. */
 static void tsif_init1(struct msm_tsif_platform_data *data)
 {
 	int val;
@@ -1844,13 +2015,14 @@ static void tsif_init1(struct msm_tsif_platform_data *data)
 	val |= 0x80000000;
 	secure_writel(val, MSM_TCSR_BASE + TCSR_ADM_0_A_CRCI_MUX_SEL);
 }
+#endif /*  */
 
 struct msm_tsif_platform_data tsif1_platform_data = {
 	.num_gpios = ARRAY_SIZE(tsif1_gpios),
 	.gpios = tsif1_gpios,
 	.tsif_pclk = "iface_clk",
 	.tsif_ref_clk = "ref_clk",
-	.init = tsif_init1
+	.init = NULL //tsif_init1
 };
 
 struct resource tsif1_resources[] = {
@@ -1871,6 +2043,7 @@ struct resource tsif1_resources[] = {
 	},
 };
 
+#if 0 /* 20120217. WSH, build error¢®¢´I AIC¡§¨£ ¡Ë¡þ¢®¢´A¡§o. */
 static void tsif_init0(struct msm_tsif_platform_data *data)
 {
 	int val;
@@ -1880,13 +2053,14 @@ static void tsif_init0(struct msm_tsif_platform_data *data)
 	val &= 0x7FFFFFFF;
 	secure_writel(val, MSM_TCSR_BASE + TCSR_ADM_0_A_CRCI_MUX_SEL);
 }
+#endif /*  */
 
 struct msm_tsif_platform_data tsif0_platform_data = {
 	.num_gpios = ARRAY_SIZE(tsif0_gpios),
 	.gpios = tsif0_gpios,
 	.tsif_pclk = "iface_clk",
 	.tsif_ref_clk = "ref_clk",
-	.init = tsif_init0
+	.init = NULL //tsif_init0
 };
 struct resource tsif0_resources[] = {
 	[0] = {
@@ -1909,7 +2083,11 @@ struct resource tsif0_resources[] = {
 struct platform_device msm_device_tsif[2] = {
 	{
 		.name          = "msm_tsif",
+#ifdef CONFIG_SKY_TDMB
+		.id            = 1,
+#else /* CONFIG_SKY_TDMB */
 		.id            = 0,
+#endif /* CONFIG_SKY_TDMB */
 		.num_resources = ARRAY_SIZE(tsif0_resources),
 		.resource      = tsif0_resources,
 		.dev = {
@@ -1919,7 +2097,11 @@ struct platform_device msm_device_tsif[2] = {
 	},
 	{
 		.name          = "msm_tsif",
+#ifdef CONFIG_SKY_TDMB
+		.id            = 0,
+#else /* CONFIG_SKY_TDMB */
 		.id            = 1,
+#endif /* CONFIG_SKY_TDMB */
 		.num_resources = ARRAY_SIZE(tsif1_resources),
 		.resource      = tsif1_resources,
 		.dev = {
@@ -1936,7 +2118,11 @@ struct platform_device msm_device_smd = {
 
 static struct msm_watchdog_pdata msm_watchdog_pdata = {
 	.pet_time = 10000,
+#if 1 //watchdog time expand
+	.bark_time = 17000,
+#else /*  */
 	.bark_time = 11000,
+#endif /*  */
 	.has_secure = true,
 };
 

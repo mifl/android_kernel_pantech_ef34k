@@ -2127,4 +2127,141 @@ config MSM_CACHE_DUMP_ON_PANIC
 	  want to dump the L1 and L2 caches on panic before any flush occurs.
 	  If unsure, say N
 
+config SKY_BT
+        bool "EF33 Bluetooth"
+        default y
+        help
+          	Support EF33 Bluetooth
+      
+        if SKY_BT 
+          config SKY_BCM_BT
+	    bool "EF33 Broadcom BT"
+	    default y
+	    help
+	      	Support Broadcom BCM4329
+		
+       	 config SKY_WCN_BT
+	    bool "EF33 Qualcomm BT"
+	    default n
+	    help
+		Support Qualcomm WCN2243	
+	 endif
+
+comment "SKY CHARGING by paiksun"
+config SKY_CHARGING
+        bool "SKY_CHARGING"
+        default y
+        help
+          	Support SKY CHARGING
+
+comment "SKY CORE VOLTAGE by paiksun"
+config SKY_CORE_VOLTAGE
+        bool "SKY_CORE_VOLTAGE"
+        default y
+        help
+          	Support SKY CORE VOLTAGE
 endif
+
+comment "Pantech SKY"
+config PANTECH_SKY
+	bool "Support Pantech SKY Brand"
+	default y
+	help
+	 Pantech SKY OEM Feature
+
+config EF33_BOARD
+	depends on PANTECH_SKY
+	bool "EF33 Board"
+	default n
+	help
+	 Support EF33 Board
+
+config EF34_BOARD
+	depends on PANTECH_SKY
+	bool "EF34 Board"
+	default n
+	select CUST_PANTECH_H
+	help
+	 Support EF34 Board		
+
+config EF35_BOARD
+	depends on PANTECH_SKY
+	bool "EF35 Board"
+	default n
+	select CUST_PANTECH_H
+	help
+	 Support EF35 Board		
+
+config PANMAC
+  depends on PANTECH_SKY
+  tristate "PANMAC"
+  default y
+  help
+    Support PANMAC
+
+config SW_RESET
+       depends on PANTECH_SKY
+       bool "SW RESET"
+       default y
+       help
+	Support SW RESET
+
+config PANTECH_ERR_CRASH_LOGGING
+       depends on PANTECH_SKY
+       bool "ERR_CRASH_LOGGING"
+       default y
+       help
+		Support ERR_CRASH_LOGGING
+
+config CUST_PANTECH_H
+	bool
+
+menu "FEATURE FOR EF33"
+
+config GSBI12_UART_CONSOLE
+	bool "EF33 GSBI12 UART_CONSOLE"
+	default y
+	help
+		Support GSBI12 UART_CONSOLE
+
+endmenu
+
+comment "SKY WLAN"
+config SKY_WLAN
+	bool "EF33 WLAN"
+	default y
+	help
+		Support EF33 WLAN
+
+config BCM4329_MEM_PREALLOC
+	bool "EF33 BCM4329 WiFI Memory Pre Allocate"
+	default y
+	help
+		Support BCM4329 Wifi 
+
+comment "SKY Sound EXT AMP"
+config SKYSND_USE_EXTAMP
+        bool "SKY Sound EXT AMP"
+        default y
+        help
+          	Support SKY Sound EXT AMP
+
+comment "SKY Sound CONTROL"
+config SKYSND_CTRL
+        bool "SKY Sound CONTROL"
+        default y
+        help
+          	Support SKY Sound Control
+
+comment "Record in Call"
+config RECINCALL
+        bool "Record in Call"
+        default y
+        help
+          	Support Record in Call
+
+if CUST_PANTECH_H
+source "arch/arm/mach-msm/cust/Kconfig"
+endif
+
+	  

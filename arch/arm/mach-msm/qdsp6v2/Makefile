@@ -18,3 +18,30 @@ obj-y += aac_in.o qcelp_in.o evrc_in.o amrnb_in.o audio_utils.o
 obj-y += audio_wma.o audio_wmapro.o audio_aac.o audio_multi_aac.o audio_utils_aio.o
 obj-$(CONFIG_MSM_ULTRASOUND) += ultrasound/
 obj-y += audio_mp3.o audio_amrnb.o audio_amrwb.o audio_evrc.o audio_qcelp.o amrwb_in.o
+
+# jhkang
+# #if 0
+# #ifdef CONFIG_EF34_BOARD	jhkang
+# obj-y += sky_snd_max9879.o
+# obj-y += mvs_pcm.o
+# obj-y += mvs_amr.o
+# obj-y += amr_transcode.o
+# obj-y += audio_mvs_adv.o
+# obj-y += audio_fileio.o
+# endif
+
+#jhkang
+obj-$(CONFIG_EF34_BOARD) += sky_snd_max9879.o
+obj-$(CONFIG_EF34_BOARD) += mvs_pcm.o
+obj-$(CONFIG_EF34_BOARD) += mvs_amr.o
+obj-$(CONFIG_EF34_BOARD) += amr_transcode.o
+obj-$(CONFIG_EF34_BOARD) += audio_mvs_adv.o
+obj-$(CONFIG_EF34_BOARD) += audio_fileio.o
+
+
+obj-$(CONFIG_EF35_BOARD) += sky_snd_max9879.o
+obj-$(CONFIG_EF35_BOARD) += mvs_pcm.o
+obj-$(CONFIG_EF35_BOARD) += mvs_amr.o
+obj-$(CONFIG_EF35_BOARD) += amr_transcode.o
+obj-$(CONFIG_EF35_BOARD) += audio_mvs_adv.o
+obj-$(CONFIG_EF35_BOARD) += audio_fileio.o

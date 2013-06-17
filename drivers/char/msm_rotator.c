@@ -1234,6 +1234,10 @@ static int msm_rotator_start(unsigned long arg,
 			*(msm_rotator_dev->img_info[s]) = info;
 			msm_rotator_dev->fd_info[s] = fd_info;
 
+#if 1 //[BIH] fix Cb/Cr swap error when next/previous movie clip played. 
+		if (copy_to_user((void __user *)arg, &info, sizeof(info)))
+			rc = -EFAULT;
+#endif /*  */
 			if (msm_rotator_dev->last_session_idx == s)
 				msm_rotator_dev->last_session_idx =
 				INVALID_SESSION;
@@ -1269,6 +1273,13 @@ static int msm_rotator_start(unsigned long arg,
 			__func__);
 		rc = -EBUSY;
 	}
+#if 1	// [BIH] fix Cb/Cr swap error when next / previous movie clip playback.
+	else {
+		if (copy_to_user((void __user *)arg, &info, sizeof(info)))
+			rc = -EFAULT;
+	}
+#endif /*  */
+
 
 rotator_start_exit:
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
